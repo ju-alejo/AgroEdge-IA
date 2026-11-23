@@ -44,7 +44,13 @@ def readings(path, station):
 def annotations(content):
     sessions = defaultdict(list)
     with io.StringIO(content.decode("utf-8-sig"), newline="") as file:
-        for row in csv.DictReader(file):
+        reader = csv.DictReader(file)
+        required = {"session", "start", "end", "label", "event", "observer", "evidence"}
+        if not reader.fieldnames or set(reader.fieldnames) != required or len(reader.fieldnames) != len(required):
+            raise ValueError("Encabezado de anotaciones incompatible. Se esperan session,start,end,label,event,observer,evidence.")
+        for row in reader:
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError(f"Cantidad de campos incompatible en la línea {reader.line_num}.")
             start, end = utc(row["start"]), utc(row["end"])
             if (end <= start or row["label"] not in LABELS or
                     any(not (row.get(k) or "").strip() for k in ("session", "event", "observer", "evidence"))):
@@ -143,12 +149,18 @@ def model_header(version, quantized):
             '}  // namespace agroedge\n')
 
 
-def train(splits):
+def label_coverage(splits):
     counts = {split: dict(Counter(row["label"] for row in group)) for split, group in splits.items()}
     events = {split: {label: len({row["event"] for row in group if row["label"] == label}) for label in LABELS}
               for split, group in splits.items()}
-    if any(counts[split].get(label, 0) < MIN_PER_CLASS or events[split][label] < MIN_EVENTS_PER_CLASS
-           for split in PARTITIONS for label in LABELS):
+    ready = all(counts[split].get(label, 0) >= MIN_PER_CLASS and events[split][label] >= MIN_EVENTS_PER_CLASS
+                for split in PARTITIONS for label in LABELS)
+    return counts, events, ready
+
+
+def train(splits):
+    counts, events, ready = label_coverage(splits)
+    if not ready:
         raise ValueError(f"Se necesitan {MIN_PER_CLASS} ventanas y {MIN_EVENTS_PER_CLASS} eventos por clase y partición. "
                          f"Ventanas disponibles: {counts}. Eventos disponibles: {events}.")
     train_rows = splits["train"]
@@ -178,17 +190,24 @@ def main():
     parser.add_argument("--labels", type=Path)
     parser.add_argument("--train-end", type=utc)
     parser.add_argument("--validation-end", type=utc)
+    parser.add_argument("--audit-only", action="store_true", help="Muestra cobertura de etiquetas sin entrenar ni exportar")
     args = parser.parse_args()
     rows = readings(args.db, args.station)
     coverage = {"rows": len(rows), "sessions": sorted({row["sessionId"] for row in rows}),
                 "quality": Counter(row["quality"] for row in rows)}
     print(json.dumps(coverage, ensure_ascii=False))
     if not args.labels:
+        if args.audit_only:
+            parser.error("--audit-only requiere --labels y los dos cortes cronológicos.")
         return
     if not args.train_end or not args.validation_end or args.train_end + EMBARGO >= args.validation_end:
         parser.error("Define ambos cortes cronológicos con un margen mayor de 30 minutos.")
     labels_bytes = args.labels.read_bytes()
     groups = windows(rows, annotations(labels_bytes), args.train_end, args.validation_end)
+    if args.audit_only:
+        counts, events, ready = label_coverage(groups)
+        print(json.dumps({"windows": counts, "events": events, "ready": ready}, ensure_ascii=False))
+        return
     centroids, quantized, counts, events, summary, vectors = train(groups)
     dataset = {"protocol": "precipitation-v1", "station": args.station, "label_order": LABELS,
                "cutoffs": [args.train_end.isoformat(), args.validation_end.isoformat()],

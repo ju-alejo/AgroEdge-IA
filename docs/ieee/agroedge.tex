@@ -14,7 +14,7 @@ Universidad Santo Tomás, Tunja Campus, Colombia}}
 \maketitle
 
 \begin{abstract}
-AgroEdge AI combines atmospheric measurements from a low-cost station in Toca, Colombia, with an external precipitation forecast and a seasonal climate advisory. Its embedded firmware acquires temperature and relative humidity from an AHT20 and atmospheric pressure from a BMP280. An ESP32-S3 extracts features from a circular buffer and classifies them using 8-bit nearest centroids. The application records both measurement and classification provenance. This interim report describes the implementation, acquisition and annotation protocol, and verification on Windows. The measurement database contained 12 valid USB records from one acquisition session. A separate integration test confirmed retrieval and indexing of a live advisory from the NOAA Climate Prediction Center. The candidate firmware compiled to a 362-kB application. Independent field labels, on-device model evaluation, and power measurements remain pending.
+AgroEdge AI combines atmospheric measurements from a low-cost station in Toca, Colombia, with an external precipitation forecast and a seasonal climate advisory. Its embedded firmware acquires temperature and relative humidity from an AHT20 and atmospheric pressure from a BMP280. The candidate firmware extracts features from a circular buffer and classifies them using 8-bit nearest centroids. The application records both measurement and classification provenance. This interim report describes the architecture, acquisition and annotation protocol, and verification on Windows. A read-only audit found 268 USB observations across two boot sessions, with a median sample interval of 5.055 s in the active session. The Java integration retrieved and indexed a live NOAA advisory. The candidate compiled to a 368-kB application for the station's operational upload profile. Independent field labels, on-device model evaluation, and power measurements remain pending.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -63,11 +63,11 @@ The compiled preliminary model contains three engineering reference prototypes f
 The advisory subsystem uses a SQLite B-tree to locate revisions and list recent publications \cite{sqlite}. A Java client consumes the existing localhost feed and indexes revision hashes in a hash map and publication dates in an ordered tree. For $N$ revisions and $D$ different publication dates, the Java index uses $O(N)$ space. An exact revision lookup takes expected $O(1)$ time. A date range with $K$ results takes $O(\log(D+1)+K)$ time.
 
 \section{Current Verification and Resource Measurement}
-The Windows database contained 12 valid USB records from one session, spanning 56 seconds. The pressure field was constant at 638.15 hPa in that interval. A co-located pressure reference and additional recordings are required to interpret this result. The available records support acquisition diagnostics, and the study still requires labeled observations across independent weather events. Application tests used an isolated database to exercise the USB schema, receipt timestamps, model status, latency field, CSV and Excel round trips, and record persistence.
+The November 23 read-only audit found 268 USB records from two boot sessions. The earlier session comprised 12 records with pressure constant at 638.15 hPa during 56 seconds. The active session comprised 256 records from approximately 21.5 minutes, including 247 valid and nine statistically flagged observations. Its pressure ranged from 735.97 to 736.28 hPa. The median inter-record interval was 5.055 s, with no skipped sequences within the observed span. This difference in pressure between sessions requires checking deployment conditions and a co-located reference before pooling the sessions for training. Independently labeled observations across weather events remain necessary. Application tests used an isolated database to exercise the USB schema, receipt timestamps, model status, latency field, CSV and Excel round trips, and record persistence.
 
 On November 23, 2026, the Windows scraper retrieved the CPC advisory issued November 12, 2026, and stored the publication date, status, synopsis, and provenance. The Next.js endpoint returned the database revision and the Java client retrieved it by hash. A second request within the protected interval was suppressed. The scheduled local task was started once within that interval. A later independent network run is needed to confirm unattended daily retrieval.
 
-Firmware was built for the ESP32-S3 Dev Module with Arduino ESP32 4.0.0, 16 MiB Flash, octal PSRAM, and a 3 MiB application partition \cite{esp}. Table~\ref{tab:build} reports build-time resource use. An RP2040-based Raspberry Pi Pico with 264 KiB SRAM and 2 MiB Flash provides an alternative with USB and I$^2$C \cite{pico}. Its runtime performance and power draw require separate measurements on the alternate board.
+The operational USB firmware was recovered from the original Arduino sketch and cached upload artifacts. Its partition table matched the candidate compiled with the same upload profile. That profile uses Arduino ESP32 4.0.0, a 4 MiB Flash setting, 240 MHz CPU frequency, UART through a USB bridge and PSRAM disabled. The module's physical Flash capacity will be confirmed on the bench \cite{esp}. Table~\ref{tab:build} reports build-time resources for the matched profile. An RP2040-based Raspberry Pi Pico with 264 KiB SRAM and 2 MiB Flash provides an alternative with USB and I$^2$C \cite{pico}. Its runtime performance and power draw require separate measurements on the alternate board.
 
 \begin{table}[ht]
 \centering
@@ -77,9 +77,9 @@ Firmware was built for the ESP32-S3 Dev Module with Arduino ESP32 4.0.0, 16 MiB 
 \hline
 Quantity & Bytes & Utilization \\
 \hline
-Program / application partition & 361,425 & 11.49\% \\
-Application image / physical flash & 361,584 & 2.16\% \\
-Static RAM / build RAM budget & 24,956 & 7.62\% \\
+Program / application partition & 367,417 & 28.03\% \\
+Application image & 367,568 & {} \\
+Static RAM / build RAM budget & 24,464 & 7.47\% \\
 Preliminary int8 / float32 weights & 9 & 25.00\% \\
 \hline
 \end{tabular}
