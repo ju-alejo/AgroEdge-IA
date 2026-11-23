@@ -68,3 +68,9 @@ Actualmente Next.js tiene el único servicio HTTP y SQLite conserva la informaci
 
 Para repetir los fixtures con el servidor local iniciado y la opción de pruebas habilitada, ejecuta `node scripts/replay-fixtures.mjs` y mira Historial en el modo Simulación. Los archivos de exportación incluidos son de este modo. Al entrenar, filtra `dataKind=REAL` y selecciona solo registros y etiquetas que hayan sido verificados según el protocolo del proyecto. Los ejemplos, las puntuaciones simuladas y las salidas de pruebas de transporte quedan fuera del entrenamiento.
 
+## Extensión USB para el clasificador de la ESP32-S3
+
+El firmware AHT20/BMP280 envía `classification` con `source: "ESP32"`, `state`, `label`, `score`, `modelVersion`, `modelStatus` (`PRELIMINARY` o `TRAINED`) e `inferenceUs` en microsegundos cuando la clasificación se ejecuta. Durante el calentamiento de la ventana se envía la medición sin clasificación. Con una lectura incompleta el dispositivo envía estado `ERROR`, clase y puntuación nulas y omite `inferenceUs`. La puntuación es un margen de distancias entre centroides y se interpreta en una escala de 0 a 1.
+
+Cuando un mensaje USB carece de reloj, el servicio asigna `receivedAt` tanto a `acquiredAt` como, si hay clasificación, a `classification.inferredAt`. En ese caso guarda `classification.inferenceTimeSource: "RECEIPT"`. Los mensajes con tiempos ISO propios conservan sus horas y el formato anterior sigue siendo compatible. El dashboard y las exportaciones conservan dicha procedencia.
+

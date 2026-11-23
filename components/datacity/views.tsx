@@ -45,10 +45,13 @@ export function InferencePanel({reading,origin}:{reading:Reading|null;origin:Ori
         <div><dt>Clase</dt><dd>{result.label??"—"}</dd></div>
         <div><dt>Puntuación</dt><dd>{fmt(result.score,3)}</dd></div>
         <div><dt>Versión del modelo</dt><dd>{result.modelVersion}</dd></div>
-        <div><dt>Momento de la inferencia</dt><dd>{fullDate(result.inferredAt)}</dd></div>
+        <div><dt>{result.inferenceTimeSource==="RECEIPT"?"Hora de recepción USB":"Momento de la inferencia"}</dt><dd>{fullDate(result.inferredAt)}</dd></div>
+        {result.inferenceUs!==undefined&&<div><dt>Latencia de clasificación</dt><dd>{result.inferenceUs} µs</dd></div>}
         <div><dt>Estación y lectura</dt><dd>{reading.stationId} · sec. {reading.sequence}</dd></div>
       </dl>}
-    <p className="ag-note">{origin==="SIMULATION"?"La clase y la puntuación son valores de demostración.":"La puntuación corresponde a la salida reportada por el dispositivo. El entrenamiento del proyecto requiere mediciones reales y etiquetas verificadas."}</p>
+    <p className="ag-note">{origin==="SIMULATION"?"La clase y la puntuación son valores de demostración.":result?.modelStatus==="PRELIMINARY"?
+      "Modelo preliminar con referencias de humedad ambiental definidas para probar la integración. La puntuación expresa la separación entre clases.":
+      "La puntuación corresponde a la salida reportada por el dispositivo."}</p>
   </Panel>;
 }
 

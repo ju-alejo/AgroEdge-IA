@@ -126,6 +126,30 @@ test("transport rejects incompatible provenance without altering saved readings"
   } finally {store.close();}
 });
 
+test("USB classifications retain latency, model status and receipt time through SQLite and exports",async()=>{
+  const store=new Store(":memory:");
+  const restored=new Store(":memory:");
+  const payload={...base,acquiredAt:undefined,classification:{source:"ESP32",state:"OK",label:"Humedad ambiental alta",
+    score:0.8,modelVersion:"humidity-prototype-1",modelStatus:"PRELIMINARY",inferenceUs:3}};
+  try {
+    const result=store.ingest(payload,"USB",undefined,now).reading;
+    assert.equal(result.classification.inferredAt,at);
+    assert.equal(result.classification.inferenceTimeSource,"RECEIPT");
+    assert.equal(result.classification.inferenceUs,3);
+    assert.equal(result.classification.modelStatus,"PRELIMINARY");
+    assert.equal(store.ingest(payload,"USB",undefined,now+1000).status,"duplicate");
+    for(const format of ["csv","xlsx"]) {
+      const file=await exportFile([result],format,{delimiter:",",meta:{}});
+      assert.deepEqual((await parseFile(file,format))[0].classification,result.classification);
+      restored.import(await parseFile(file,format));
+    }
+    assert.equal(restored.ingest(payload,"USB",undefined,now+3000).status,"duplicate");
+    assert.throws(()=>store.ingest({...payload,acquiredAt:at},"WIFI",undefined,now),/fecha ISO/);
+    assert.throws(()=>store.ingest({...payload,sequence:2,classification:{...payload.classification,inferenceUs:-1}},"USB"),/microsegundos/);
+    assert.throws(()=>store.ingest({...payload,sequence:2,classification:{...payload.classification,inferenceTimeSource:"RECEIPT"}},"USB"),/Fuente horaria/);
+  } finally {store.close();restored.close();}
+});
+
 test("the previously delivered exports remain importable", async()=>{
   const store=new Store(":memory:");
   try {

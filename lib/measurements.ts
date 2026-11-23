@@ -51,7 +51,8 @@ export function validateLive(v: Record<string, unknown>, origin: Origin, history
   }
   const missingBefore=Math.max(0,ids.sequence-previousSequence-1);
   const timeSource=origin==="SIMULATION"?"SIMULATION":hasTime?"DEVICE":"RECEIPT";
-  return {schemaVersion:1,...ids,...values,origin,dataKind:kind,quality,missingBefore,issues,classification:parseClassification(v.classification,kind),
+  return {schemaVersion:1,...ids,...values,origin,dataKind:kind,quality,missingBefore,issues,
+    classification:parseClassification(v.classification,kind,origin==="USB"?receivedAt:undefined),
     acquiredAt,receivedAt,timeSource,...(testTransport?{testTransport}:{})};
 }
 export function validateImport(v: Record<string, unknown>): Reading {
@@ -77,6 +78,7 @@ export function validateImport(v: Record<string, unknown>): Reading {
   const testTransport=v.testTransport;
   if(testTransport!==undefined && (dataKind!=="SIMULATED" || (testTransport!=="USB"&&testTransport!=="WIFI"))) throw new Error("Solo SIMULATED admite un transporte de prueba.");
   return {schemaVersion:1,...ids,...values,origin,dataKind,quality,missingBefore:v.missingBefore,issues:v.issues,
-    classification:parseClassification(v.classification,dataKind),acquiredAt,receivedAt,timeSource,...(testTransport?{testTransport}:{})};
+    classification:parseClassification(v.classification,dataKind,undefined,origin==="USB"?receivedAt:undefined),
+    acquiredAt,receivedAt,timeSource,...(testTransport?{testTransport}:{})};
 }
 

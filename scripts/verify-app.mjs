@@ -106,14 +106,21 @@ try {
     assert.equal(ineligible.status,400);
     assert.match((await ineligible.json()).error,/condición de datos/);
     assert.equal((await read("measurements?origin="+origin.toUpperCase())).total,0);
-    const payload={...fixture,origin:origin.toUpperCase(),classification:{source:"ESP32",state:"OK",label:"Fixture de QA",
-      score:.625,modelVersion:"qa-only",inferredAt:fixture.acquiredAt}};
+    const serial=origin==="usb";
+    const payload={...fixture,acquiredAt:serial?undefined:fixture.acquiredAt,origin:origin.toUpperCase(),
+      classification:{source:"ESP32",state:"OK",label:"Fixture de QA",score:.625,modelVersion:"qa-only",
+        ...(serial?{modelStatus:"PRELIMINARY",inferenceUs:3}:{inferredAt:fixture.acquiredAt})}};
     const first=await post("measurements/"+origin,payload,true);
     assert.equal(first.status,201,await first.clone().text());
     assert.equal((await post("measurements/"+origin,payload,true)).status,200);
     const snapshot=await read("snapshot?origin="+origin.toUpperCase());
     assert.equal(snapshot.latest.temperature,14);
     assert.equal(snapshot.inference.classification.modelVersion,"qa-only");
+    if(serial) {
+      assert.equal(snapshot.inference.classification.inferenceTimeSource,"RECEIPT");
+      assert.equal(snapshot.inference.classification.inferredAt,snapshot.inference.receivedAt);
+      assert.equal(snapshot.inference.classification.inferenceUs,3);
+    }
   }
   for(const origin of ["SIMULATION","USB","WIFI"]) {
     for(const format of ["csv","xlsx"]) {

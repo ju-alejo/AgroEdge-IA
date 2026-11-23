@@ -15,6 +15,9 @@ export type TinyML = {
   score: number | null;
   modelVersion: string;
   inferredAt: string;
+  inferenceUs?: number;
+  inferenceTimeSource?: "RECEIPT";
+  modelStatus?: "PRELIMINARY" | "TRAINED";
 };
 export type Reading = {
   schemaVersion: 1;
@@ -101,21 +104,36 @@ export function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value!=="object" || Array.isArray(value)) throw new Error("Se esperaba un objeto JSON.");
   return value as Record<string, unknown>;
 }
-export function parseClassification(raw: unknown, kind: Reading["dataKind"]): TinyML|null {
+export function parseClassification(raw: unknown, kind: Reading["dataKind"], usbReceipt?: string, importReceipt?: string): TinyML|null {
   if (raw===null || raw===undefined) return null;
   const c=object(raw);
   const source=kind==="REAL"?"ESP32":"SIMULATED";
   if(c.source!==source || (c.state!=="OK"&&c.state!=="ERROR")) throw new Error("Fuente o estado TinyML incompatible.");
   const modelVersion=identifier(c.modelVersion,"modelVersion");
-  const inferredAt=utc(c.inferredAt);
+  const {inferenceUs, modelStatus}=c;
+  if(inferenceUs!==undefined && (typeof inferenceUs!=="number" || !Number.isSafeInteger(inferenceUs) || inferenceUs<0)) {
+    throw new Error("inferenceUs debe ser un entero no negativo en microsegundos.");
+  }
+  if(modelStatus!==undefined && (source!=="ESP32" || (modelStatus!=="PRELIMINARY" && modelStatus!=="TRAINED"))) {
+    throw new Error("Estado de entrenamiento TinyML incompatible.");
+  }
+  const fallback=c.inferredAt===undefined && source==="ESP32" && usbReceipt!==undefined;
+  const inferredAt=fallback?usbReceipt:utc(c.inferredAt);
+  if(c.inferenceTimeSource!==undefined && (c.inferenceTimeSource!=="RECEIPT" || !importReceipt || inferredAt!==importReceipt || source!=="ESP32")) {
+    throw new Error("Fuente horaria de inferencia incompatible.");
+  }
+  const metadata: Pick<TinyML,"modelVersion"|"inferredAt"|"inferenceUs"|"inferenceTimeSource"|"modelStatus">={
+    modelVersion,inferredAt,...(inferenceUs===undefined?{}:{inferenceUs}),
+    ...(fallback||c.inferenceTimeSource==="RECEIPT"?{inferenceTimeSource:"RECEIPT" as const}:{}),
+    ...(modelStatus===undefined?{}:{modelStatus})};
   if(c.state==="ERROR") {
     if(c.label!==null||c.score!==null) throw new Error("Una inferencia ERROR debe traer label y score nulos.");
-    return {source,state:c.state,label:null,score:null,modelVersion,inferredAt};
+    return {source,state:c.state,label:null,score:null,...metadata};
   }
   if (typeof c.label!=="string" || !c.label.trim() || c.label.length>100 || /[\u0000-\u001f]/.test(c.label)
       || typeof c.score!=="number" || !Number.isFinite(c.score) || c.score<0 || c.score>1) {
     throw new Error("TinyML necesita una clase y una puntuación entre 0 y 1.");
   }
-  return {source,state:c.state,label:c.label,score:c.score,modelVersion,inferredAt};
+  return {source,state:c.state,label:c.label,score:c.score,...metadata};
 }
 
