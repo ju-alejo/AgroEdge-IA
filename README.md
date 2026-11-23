@@ -2,6 +2,8 @@
 
 Estación agroclimática universitaria para Toca, Boyacá. La aplicación adapta la beta de DataCity AI y reutiliza su estructura Next.js y React, barra lateral, tarjetas, gráficas Recharts, cálculos estadísticos, detección de anomalías y análisis temporal.
 
+La [guía de TinyML y verificación del proyecto](docs/tinyml.md) describe el firmware candidato para AHT20/BMP280, el protocolo de captura, la evaluación en placa y la consulta Java del boletín ENSO.
+
 ## Versión 0.2.1 · Extracción del boletín con BeautifulSoup
 
 El módulo R5 utiliza Requests para consultar el HTML por HTTPS y BeautifulSoup (`bs4`) para extraer y limpiar el texto del que se obtienen la fecha, el estado ENSO y la sinopsis. Si ya ejecutaste la versión 0.2.0, vuelve a instalar las dependencias de `scraper/requirements.txt` en tu entorno Python para incorporar BeautifulSoup.

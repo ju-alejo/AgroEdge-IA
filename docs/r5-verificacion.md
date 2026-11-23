@@ -71,3 +71,11 @@ La verificación de la vista utilizó el HTML de producción y el componente Rea
 La programación se probó con reloj controlado. La tarea de Windows y el flujo de GitHub se entregan listos para su activación posterior. El equipo físico, la consulta en vivo a Open-Meteo y una ejecución alojada en GitHub quedan fuera de las validaciones realizadas en esta actualización. Los adaptadores USB y Wi-Fi se comprobaron con los ensayos de regresión de 0.1.1.
 
 [R5 y guía de integración](r5.md) · [Página oficial contrastada](https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc_Sp.shtml)
+
+## Verificación en Windows · 23 de noviembre de 2026
+
+- `python -m unittest discover -s tests -p test_r5.py -v` superó nueve pruebas, entre ellas dos ciclos del recolector con reloj controlado, deduplicación, respeto de `robots.txt` y aislamiento de la base de mediciones.
+- `python scraper/agroclima.py --dir .venv/r5-verificacion fetch` obtuvo por HTTPS la edición del 12 de noviembre de 2026, con estado **Advertencia de El Niño**, sinopsis y procedencia NOAA/CPC. Se obtuvo la revisión `faf0fd27e824d3497cb107603392756239b285754a9fa727ec017a1f07f115e6`. Un segundo comando devolvió `EN_ESPERA` con próxima consulta desde el 24 de noviembre a las 16:19, hora de Bogotá.
+- Tras `PRAGMA quick_check`, se copió la base R5 de verificación a `data/agroclima.sqlite` mediante el respaldo de SQLite y creación exclusiva del destino. La API `GET /api/agroclima` leyó la revisión local, con `bundled=false` y `live_seen` informado. `BulletinTool` encontró la misma revisión en la API por hash.
+- La tarea local **AgroEdge IA - Boletin R5** quedó programada diariamente a las 16:30, hora de Bogotá. Su inicio manual el 23 de noviembre devolvió código `0` dentro de la ventana de espera. La primera consulta programada está prevista el 24 de noviembre y queda pendiente verificar su resultado con `Get-ScheduledTaskInfo` y `scraper/agroclima.py status`.
+- El adaptador de Open-Meteo recuperó por HTTPS el pronóstico para el punto de referencia de Toca y devolvió ambos horizontes de 24 y 48 horas. La previsión se mantiene en su ruta independiente.

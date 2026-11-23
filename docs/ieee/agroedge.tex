@@ -1,0 +1,111 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage[hidelinks]{hyperref}
+\urlstyle{same}
+
+\title{AgroEdge AI: An Embedded Agroclimatic Monitoring System for Irrigation Decision Support in Toca, Colombia}
+
+\author{\IEEEauthorblockN{Juan Alejandro Castillo Arévalo and Sergio Andrés Guerrero Alba}
+\IEEEauthorblockA{Data Engineering and Artificial Intelligence\\
+Universidad Santo Tomás, Tunja Campus, Colombia}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+AgroEdge AI combines atmospheric measurements from a low-cost station in Toca, Colombia, with an external precipitation forecast and a seasonal climate advisory. Its embedded firmware acquires temperature and relative humidity from an AHT20 and atmospheric pressure from a BMP280. An ESP32-S3 extracts features from a circular buffer and classifies them using 8-bit nearest centroids. The application records both measurement and classification provenance. This interim report describes the implementation, acquisition and annotation protocol, and verification on Windows. The measurement database contained 12 valid USB records from one acquisition session. A separate integration test confirmed retrieval and indexing of a live advisory from the NOAA Climate Prediction Center. The candidate firmware compiled to a 362-kB application. Independent field labels, on-device model evaluation, and power measurements remain pending.
+\end{abstract}
+
+\begin{IEEEkeywords}
+agroclimatic monitoring, edge computing, TinyML, environmental data acquisition, web scraping
+\end{IEEEkeywords}
+
+\section{Problem and Scope}
+Irrigation planning depends on the crop, its growth stage, and conditions at the plot. The FAO reference evapotranspiration method also considers radiation, wind, temperature, and humidity \cite{fao}. AgroEdge provides the farmer with local atmospheric observations, the forecast for the vicinity of Toca, and an ENSO advisory. Assessing water availability in the root zone, prescribing an irrigation dose, and controlling a pump remain outside the current instrument's scope.
+
+The Boyacá agroclimatic working group and the IDEAM bulletins document the regional role of agroclimatic information \cite{boyaca,ideam}. The beneficiary interview and site record are pending. The interview will document crop and stage, current information sources, irrigation practice, decisions affected by rainfall, and how the farmer evaluates the station's usefulness. Consent and the anonymized interview record are required before including beneficiary-specific findings.
+
+\section{System Architecture}
+The sensor node uses I$^2$C on GPIO8 and GPIO9. The AHT20 at address \texttt{0x38} supplies air temperature and relative humidity. The BMP280 at \texttt{0x77} supplies station pressure, converted from pascals to hectopascals in the firmware. The node sends a JSON record over USB at 115200 baud every five seconds \cite{aht,bmp}. A Python serial bridge forwards records to Next.js. The application validates units and physical ranges, tracks sessions and sequences, and stores records in SQLite. Its browser view preserves the origin of each record and shows the reported class, score, model version, and inference time. The host supplies a labeled receive time when the device lacks a synchronized clock. The simulator writes to a separate table.
+
+\begin{figure}[ht]
+\centering
+\begin{tabular}{c}
+AHT20 and BMP280 $\rightarrow$ I$^2$C $\rightarrow$ ESP32-S3 \\
+\(\downarrow\) Serial JSON with observations and classification \\
+Python bridge $\rightarrow$ Validation $\rightarrow$ SQLite \\
+\(\downarrow\) Next.js dashboard \\
+Open-Meteo forecast \quad $+$ \quad NOAA advisory
+\end{tabular}
+\caption{Local acquisition and classification with two separately attributed external feeds.}
+\label{fig:workflow}
+\end{figure}
+
+The observation path in Fig.~\ref{fig:workflow} requires power and a working sensor bus. The node can classify without Internet access. Open-Meteo provides a forecast for two horizons of 24 and 48 hours \cite{openmeteo}. A separate Python process retrieves the CPC Spanish ENSO discussion via HTTPS, parses the HTML with BeautifulSoup, and records publication date, advisory status, synopsis, source URL, and a content hash \cite{noaa}. A persistent request gate limits live requests and respects the provider's access rules. The advisory is presented at its seasonal scale.
+
+\section{Local Dataset and Evaluation Protocol}
+For each acquisition, the team will record the station and boot session, installation conditions, clock reference, and any interruption. The station will be ventilated, shielded from direct radiation and rain, and checked against a pressure reference at similar elevation. Each reading is linked to its source session and sequence number. Quality flags distinguish valid, missing, invalid, and statistically atypical samples. The protocol requires reviewing atypical observations alongside the field record to assess potential selection bias.
+
+Independent site observations are used for the proposed precipitation feasibility study. An observer identifies intervals of visible precipitation and intervals of observed absence, each with a synchronized start and end time and an evidence identifier. Ambiguous intervals remain unlabeled. The model inputs consist of observations from the node during the same window. A window must be completely contained within a labeled interval. Automated quality checks exclude invalid, missing, and flagged atypical rows, and a gap longer than eight seconds or a skipped sequence interrupts the window.
+
+The dataset builder uses disjoint six-sample windows. It assigns complete sessions to chronological training, validation, and test partitions with a 30-minute separation after each cutoff. A shared weather event identifier across partitions causes the build to fail. The prototype protocol requires at least two independent events and ten complete windows per class in each partition. Version identifiers are derived from a manifest of features, labels, capture identity, and source hashes. Synthetic test fixtures remain outside the dataset.
+
+The evaluation will compare a majority-class baseline, a float centroid model, and the quantized model. The confusion matrix and class support, accuracy, precision, recall, and F1 will be calculated separately on validation and test data. The team will freeze the test set before model selection and report class balance and limitations by event. Test vectors will subsequently be replayed on the microcontroller for equivalence with the host int8 output.
+
+\section{Classifier and Data Structures}
+The implementation maintains six recent samples in a ring buffer. It updates the temperature and humidity sums as it overwrites the oldest sample. Feature extraction computes the means of these two variables and the pressure change between the first and last samples. Each update and feature extraction requires $O(1)$ time. The buffer uses $O(W)$ space for $W$ samples.
+
+The feasibility model estimates one centroid per observed class from training observations. The integer representation uses feature steps of 1~$^{\circ}$C, 1 percentage point of humidity, and 0.05~hPa. Each coefficient is rounded to the nearest integer and saturated to the signed 8-bit range. Let $x$ denote the input feature vector and $c_j$ the centroid of class $j$. The classifier minimizes $d_j=\sum_i (x_i-c_{j,i})^2$ using a 32-bit accumulator. The reported score $(d_2-d_1)/(d_1+d_2+1)$ uses the nearest and runner-up distances. It represents relative separation in feature space. The firmware implementation requires $O(CF)$ time and constant working memory for $C$ classes and $F$ features, with $CF$ weights stored in flash.
+
+The compiled preliminary model contains three engineering reference prototypes for low, medium, and high atmospheric humidity, centered at 35, 60, and 85 percent relative humidity. Its purpose is to exercise the feature, inference, and transport path before labeled field training. The precipitation classifier's effectiveness remains unmeasured.
+
+The advisory subsystem uses a SQLite B-tree to locate revisions and list recent publications \cite{sqlite}. A Java client consumes the existing localhost feed and indexes revision hashes in a hash map and publication dates in an ordered tree. For $N$ revisions and $D$ different publication dates, the Java index uses $O(N)$ space. An exact revision lookup takes expected $O(1)$ time. A date range with $K$ results takes $O(\log(D+1)+K)$ time.
+
+\section{Current Verification and Resource Measurement}
+The Windows database contained 12 valid USB records from one session, spanning 56 seconds. The pressure field was constant at 638.15 hPa in that interval. A co-located pressure reference and additional recordings are required to interpret this result. The available records support acquisition diagnostics, and the study still requires labeled observations across independent weather events. Application tests used an isolated database to exercise the USB schema, receipt timestamps, model status, latency field, CSV and Excel round trips, and record persistence.
+
+On November 23, 2026, the Windows scraper retrieved the CPC advisory issued November 12, 2026, and stored the publication date, status, synopsis, and provenance. The Next.js endpoint returned the database revision and the Java client retrieved it by hash. A second request within the protected interval was suppressed. The scheduled local task was started once within that interval. A later independent network run is needed to confirm unattended daily retrieval.
+
+Firmware was built for the ESP32-S3 Dev Module with Arduino ESP32 4.0.0, 16 MiB Flash, octal PSRAM, and a 3 MiB application partition \cite{esp}. Table~\ref{tab:build} reports build-time resource use. An RP2040-based Raspberry Pi Pico with 264 KiB SRAM and 2 MiB Flash provides an alternative with USB and I$^2$C \cite{pico}. Its runtime performance and power draw require separate measurements on the alternate board.
+
+\begin{table}[ht]
+\centering
+\caption{Compiled ESP32-S3 resource figures}
+\label{tab:build}
+\begin{tabular}{lrr}
+\hline
+Quantity & Bytes & Utilization \\
+\hline
+Program / application partition & 361,425 & 11.49\% \\
+Application image / physical flash & 361,584 & 2.16\% \\
+Static RAM / build RAM budget & 24,956 & 7.62\% \\
+Preliminary int8 / float32 weights & 9 & 25.00\% \\
+\hline
+\end{tabular}
+\end{table}
+
+The firmware benchmark is configured for 256 measured runs following 16 warm-up runs. The procedure records cycle mean, standard deviation and maximum, elapsed batch duration, internal heap, stack high-water mark and PSRAM. Constant CPU frequency enables conversion of measured cycles to time. Elapsed batch time also includes harness overhead and establishes the denominator for benchmark throughput. The build summary gives static memory use. Board instrumentation will measure voltage and current at the power input during baseline sensing and sustained inference. The energy difference over a timed batch can be divided by the completed inference count, with the measurement bandwidth and uncertainty reported.
+
+\section{Conclusion}
+The current implementation ties local acquisition and a compact classification kernel to a traceable dashboard and a periodically scheduled advisory. The most immediate experimental work is to confirm the candidate on the ESP32-S3, collect labeled captures from independent events, and measure power and memory during operation. Those observations will determine whether the precipitation target can be supported by the available features and whether the ESP32-S3 is justified for this workload.
+
+\section*{Use of AI Tools}
+OpenAI Codex assisted with software integration, checks, and preparation of this interim manuscript. The authors will review the text and verify the measurements and their interpretation before submission.
+
+\IEEEtriggeratref{5}
+\begin{thebibliography}{00}
+\raggedright
+\bibitem{fao} R. G. Allen, L. S. Pereira, D. Raes, and M. Smith, \emph{Crop Evapotranspiration}, FAO Irrigation and Drainage Paper 56, Rome, 1998. [Online]. Available: \url{https://www.fao.org/4/X0490E/X0490E00.htm}
+\bibitem{boyaca} Gobernación de Boyacá, ``Mesa Agroclimática de Boyacá.'' [Online]. Available: \url{https://www.boyaca.gov.co/secretariaagricultura/mesa-agroclimatica-de-boyaca/}
+\bibitem{ideam} IDEAM, ``Boletines técnicos.'' [Online]. Available: \url{https://www.ideam.gov.co/sala-de-prensa/boletines}
+\bibitem{aht} Guangzhou Aosong Electronics, ``AHT20 data sheet.'' [Online]. Available: \url{https://asairsensors.com/wp-content/uploads/2021/09/Data-Sheet-AHT20-Humidity-and-Temperature-Sensor-ASAIR-V1.0.03.pdf}
+\bibitem{bmp} Adafruit Industries, ``Adafruit BMP280 Library.'' [Online]. Available: \url{https://github.com/adafruit/Adafruit_BMP280_Library}
+\bibitem{openmeteo} Open-Meteo, ``Weather Forecast API.'' [Online]. Available: \url{https://open-meteo.com/en/docs}
+\bibitem{noaa} NOAA Climate Prediction Center, ``ENSO Diagnostic Discussion, Spanish edition.'' [Online]. Available: \url{https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc_Sp.shtml}
+\bibitem{sqlite} SQLite, ``Query planning.'' [Online]. Available: \url{https://www.sqlite.org/queryplanner.html}
+\bibitem{esp} Espressif Systems, ``ESP32-S3-DevKitC-1 User Guide.'' [Online]. Available: \url{https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/user_guide_v1.1.html}
+\bibitem{pico} Raspberry Pi, ``Raspberry Pi Pico.'' [Online]. Available: \url{https://www.raspberrypi.com/products/raspberry-pi-pico/}
+\end{thebibliography}
+
+\end{document}
