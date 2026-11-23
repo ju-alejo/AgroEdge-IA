@@ -1,0 +1,38 @@
+name: Boletin AgroEdge R5
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 12 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: agroedge-r5-collection
+  cancel-in-progress: false
+jobs:
+  collect:
+    if: vars.AGROEDGE_R5_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r scraper/requirements.txt
+      - name: Recuperar historial y política de reintento
+        run: |
+          mkdir -p "$RUNNER_TEMP/r5"
+          if test -f boletines/state.sqlite; then cp boletines/state.sqlite "$RUNNER_TEMP/r5/agroclima.sqlite"; fi
+      - name: Consultar el HTML
+        id: consulta
+        run: python scraper/agroclima.py --dir "$RUNNER_TEMP/r5" fetch
+      - name: Guardar resultados y estado de reintento
+        if: success() || steps.consulta.outcome == 'failure'
+        run: |
+          mkdir -p boletines
+          python scraper/agroclima.py --dir "$RUNNER_TEMP/r5" export boletines/r5.json
+          cp "$RUNNER_TEMP/r5/agroclima.sqlite" boletines/state.sqlite
+          git config user.name 'AgroEdge R5'
+          git config user.email 'agroedge-r5@users.noreply.github.com'
+          git add -- boletines/r5.json boletines/state.sqlite
+          if ! git diff --cached --quiet; then git commit -m 'Actualizar archivo de boletines R5'; git push; fi

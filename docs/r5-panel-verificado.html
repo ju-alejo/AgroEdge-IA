@@ -1,0 +1,81 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AgroEdge IA · Evidencia R5</title><style>body{background:#0d1820;color:#eef4f1;font:16px/1.5 system-ui;max-width:960px;margin:3rem auto;padding:1rem}h2,h3,p{margin:0}.panel{border:1px solid #38505f;border-radius:12px}.button{display:none}header{margin-bottom:1rem}</style><style>.ag-topbar { gap: 1rem; min-height: 67px; height: auto; padding-block: .7rem; }
+.ag-top-left { display: flex; align-items: center; gap: .5rem; font-weight: 650; }
+.ag-top-left .ag-note { font-weight: 400; }
+.ag-mode { display: flex; align-items: center; gap: .65rem; font-size: .9rem; }
+.ag-page-heading { display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
+.ag-page-heading h1 { font-size: clamp(1.8rem, 4vw, 2.65rem); line-height: 1.12; letter-spacing: -.04em; font-weight: 700; }
+.ag-page-heading p { color: #aebdc7; margin-top: .55rem; }
+.ag-workspace { display: grid; gap: 1rem; max-width: 1490px; }
+.ag-status, .ag-tags, .ag-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .7rem; }
+.ag-status { padding: .55rem .8rem; border: 1px solid #294538; background: #122923; border-radius: .6rem; font-size: .88rem; }
+.ag-section { display: flex; flex-direction: column; gap: .95rem; min-width: 0; padding: 1.25rem; }
+.ag-section h2 { font-size: 1.12rem; }
+.ag-section h2 svg { display: inline; margin-right: .3rem; vertical-align: middle; }
+.ag-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.ag-heading p, .ag-section > p, .ag-note { color: #adbeca; font-size: .91rem; }
+.ag-heading p { margin-top: .24rem; }
+.ag-observation { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.ag-observation p { color: #adbeca; }
+.ag-metrics { margin: 0; grid-template-columns: repeat(3,minmax(0,1fr)); }
+.ag-metrics .metric { min-width: 0; }
+.ag-controls, .ag-filterbar, .ag-tabbar { display: flex; flex-wrap: wrap; align-items: end; gap: .85rem; }
+.ag-workspace label:not(.ag-check) { display: grid; gap: .34rem; font-size: .87rem; }
+.ag-workspace label.ag-check { display: flex; align-items: center; align-self: center; gap: .45rem; font-size: .88rem; }
+.ag-check input { accent-color: #6be4b0; width: 1.05rem; height: 1.05rem; }
+.ag-controls input[type=number] { width: 8rem; }
+.ag-controls input[list] { width: 11rem; }
+.ag-session { min-width: 0; max-width: min(100%, 28rem); }
+.ag-session select { text-overflow: ellipsis; width: 100%; }
+.ag-mode select, .ag-workspace select { font: inherit; min-height: 2.62rem; max-width: 100%; border: 1px solid #38505f; border-radius: 7px; background: #0c1720; color: #e5edf4; padding: .45rem 1.7rem .45rem .65rem; }
+.ag-workspace select:focus-visible, .ag-mode select:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.ag-workspace :disabled { opacity: .67; }
+.ag-detail-grid, .ag-two { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; }
+.ag-trend-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 1rem; }
+.ag-span { grid-column: 1 / -1; }
+.ag-dl { margin: 0; }
+.ag-dl div, .ag-session-list li { display: flex; flex-wrap: wrap; gap: .5rem 1rem; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #253440; padding: .55rem 0; }
+.ag-dl dt { color: #aabcc7; }
+.ag-dl dd { margin: 0; overflow-wrap: anywhere; }
+.ag-dl div:last-child { border-bottom: 0; }
+.ag-large { font-size: clamp(2rem, 5vw, 3rem); color: #83c5fb; line-height: 1; }
+.ag-large small { font-size: 1.05rem; }
+.ag-options > summary, .ag-table summary { cursor: pointer; color: #9be8c1; }
+.ag-options .ag-table-scroll { margin-top: .85rem; max-height: 24rem; }
+.ag-table-scroll { width: 100%; overflow: auto; }
+.ag-table { border-collapse: collapse; width: 100%; font-size: .87rem; }
+.ag-table th, .ag-table td { padding: .65rem .55rem; border-bottom: 1px solid #263845; text-align: left; vertical-align: top; }
+.ag-table thead th { color: #a5bcca; white-space: nowrap; background: #14232d; }
+.ag-table small { display: block; color: #aabdc9; overflow-wrap: anywhere; font-size: .77rem; }
+.ag-table ul { padding-left: 1rem; }
+.ag-checkboxes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .55rem; margin: .85rem 0; }
+.ag-import { display: flex; gap: .75rem; align-items: end; flex-wrap: wrap; }
+.ag-import input { max-width: 100%; }
+.ag-alerts, .ag-session-list { list-style: none; padding: 0; margin: 0; }
+.ag-alerts li { display: flex; gap: .7rem; padding: .7rem 0; border-bottom: 1px solid #263845; }
+.ag-alerts svg { color: #efcb85; }
+.ag-alerts small { display: block; color: #aabdc9; }
+.ag-alerts p { margin-top: .3rem; }
+.ag-session-list span { color: #adbeca; font-size: .84rem; overflow-wrap: anywhere; }
+.ag-feedback { border: 1px solid #376252; border-radius: 8px; padding: .65rem .8rem; background: #142c27; overflow-wrap: anywhere; }
+.ag-single-reading { display: grid; gap: .3rem; place-content: center; text-align: center; min-height: 9rem; }
+.ag-single-reading strong { font-size: 1.65rem; }
+.ag-forecast a, .ag-note a { color: #9be8c1; text-decoration: underline; }
+@media (max-width: 840px) {
+  .ag-two, .ag-detail-grid, .ag-trend-grid { grid-template-columns: 1fr; }
+  .ag-page-heading { align-items: start; flex-direction: column; }
+}
+@media (max-width: 560px) {
+  .ag-top-left > span { display: none; }
+  .ag-topbar { justify-content: flex-start; }
+  .ag-mode { gap: .4rem; }
+  .ag-metrics { grid-template-columns: 1fr; }
+  .ag-section { padding: 1rem; }
+  .ag-workspace .button { white-space: normal; }
+}
+
+.ag-issue { display:grid; gap:.55rem; padding:.9rem 1rem; background:#142822; border-inline-start:3px solid #68c89c; border-radius:.25rem; }
+.ag-issue h3 { font-size:1.05rem; font-weight:650; }
+.ag-issue time, .ag-issue-title { color:#bfd3c8; font-size:.83rem; }
+.ag-issue a { color:#a2e7c7; text-decoration:underline; text-underline-offset:.18em; }
+.ag-climate details .ag-issue { margin-top:.65rem; }
+</style><main><header><strong>AgroEdge IA · Evidencia R5</strong><p>Vista estática del componente del dashboard, renderizada con la respuesta de la ruta compilada después de la segunda extracción.</p></header><section class="panel ag-section ag-climate" aria-labelledby="ag-climate-heading"><div class="ag-heading"><div><h2 id="ag-climate-heading">Boletín agroclimático externo</h2><p>Contexto estacional del Pacífico · El Niño y La Niña</p></div><button class="button secondary">Ver lluvia prevista en Toca</button></div><article class="ag-issue"><div class="ag-heading"><h3>Advertencia de El Niño</h3><time dateTime="2026-11-12">12 de noviembre de 2026</time></div><p class="ag-issue-title">EL NIÑO/OSCILACIÓN DEL SUR · DISCUSIÓN DIAGNÓSTICA</p><p>El Niño continúa fortaleciéndose, con un El Niño fuerte a muy fuerte bien probable hasta enero-marzo de 2027 (manteniéndose una probabilidad mayor al 79%).</p><p class="ag-note">NOAA / Climate Prediction Center · HTML guardado · Procesado en Bogotá: 22/11/2026, 12:26 p. m. · <a href="https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc_Sp.shtml" target="_blank" rel="noreferrer">Ver boletín en NOAA</a></p></article><p class="ag-note">Última operación en AgroEdge (Bogotá): 22/11/2026, 12:26 p. m. · archivo HTML</p><p class="ag-note">Para planear las próximas 24 o 48 horas, consulta la lluvia prevista por Open-Meteo y las lecturas de tu estación.</p></section></main></html>

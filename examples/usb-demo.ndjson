@@ -1,0 +1,3 @@
+{"schemaVersion":1,"origin":"USB","stationId":"TEST-USB","sessionId":"serial-fixture","sequence":1,"acquiredAt":"2026-11-19T19:00:00Z","temperature":14.3,"humidity":74.5,"pressure":733.8}
+{"schemaVersion":1,"origin":"USB","stationId":"TEST-USB","sessionId":"serial-fixture","sequence":3,"acquiredAt":"2026-11-19T19:00:04Z","temperature":null,"humidity":75.1,"pressure":733.7}
+

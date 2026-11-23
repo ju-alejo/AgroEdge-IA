@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1, "origin": "WIFI",
+  "stationId": "TEST-WIFI", "sessionId": "http-fixture", "sequence": 1,
+  "acquiredAt": "2026-11-19T19:00:00Z",
+  "temperature": 15.2, "humidity": 72.4, "pressure": 735.1,
+  "classification": {
+    "source": "SIMULATED", "state": "OK", "label": "Ejemplo de interfaz",
+    "score": 0.5, "modelVersion": "demo-sin-modelo", "inferredAt": "2026-11-19T19:00:00Z"
+  }
+}
+
