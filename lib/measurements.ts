@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { anomalies, bounds, identifier, object, origins, parseClassification, qualities, utc, variables,
+import { bounds, identifier, object, origins, parseClassification, qualities, utc, variables,
   type Origin, type Reading, type Quality } from "./domain.ts";
 
 export function transport(value: unknown): Origin {
@@ -25,7 +25,7 @@ export function sourceKind(v: Record<string, unknown>, origin: Origin, testTrans
   }
   return kind;
 }
-export function validateLive(v: Record<string, unknown>, origin: Origin, history: Reading[], previousSequence: number,
+export function validateLive(v: Record<string, unknown>, origin: Origin, previousSequence: number,
   receivedAt: string, testTransport?: "USB"|"WIFI"): Reading {
   const ids=identity(v,origin);
   const kind=sourceKind(v,origin,testTransport);
@@ -44,10 +44,6 @@ export function validateLive(v: Record<string, unknown>, origin: Origin, history
       issues.push(`${k}: tipo o rango inválido (${lo} a ${hi})`);
       quality="INVALID";
     } else values[k]=n;
-  }
-  if (quality==="VALID") {
-    const atypical=anomalies(values,history);
-    if(atypical.length) { quality="ANOMALY"; issues.push(...atypical); }
   }
   const missingBefore=Math.max(0,ids.sequence-previousSequence-1);
   const timeSource=origin==="SIMULATION"?"SIMULATION":hasTime?"DEVICE":"RECEIPT";

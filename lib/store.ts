@@ -6,6 +6,7 @@ import { object, statistics, correlations, utc, type Origin, type Reading } from
 import { identity, sourceKind, transport, validateImport, validateLive } from "./measurements.ts";
 import { simulationConfig, synthetic, type SimConfig } from "./simulator.ts";
 import { predict } from "./trend.ts";
+import { assessDeviation, referenceAgeMs, referenceSize, regimeChangeIssue, regimeSize } from "./anomaly.ts";
 
 export const maxExport = 25000;
 const tableFor=(origin: Origin)=>origin==="SIMULATION"?"simulated_readings":"real_readings";
@@ -54,6 +55,23 @@ export class Store {
   ingest(value:unknown,origin:Origin,testTransport?:"USB"|"WIFI",now=Date.now()) {
     return this.transaction(()=>this.saveLive(object(value),origin,iso(now),testTransport));
   }
+  private assessReading(reading:Reading) {
+    if (reading.quality!=="VALID") return;
+    const table=tableFor(reading.origin);
+    const scope=[reading.origin,reading.stationId,reading.sessionId,reading.sequence,
+      iso(Date.parse(reading.acquiredAt)-referenceAgeMs),reading.acquiredAt] as const;
+    const within="origin=? AND station=? AND session=? AND seq<? AND acquired>=? AND acquired<=?";
+    const boundary=this.db.prepare(`SELECT seq FROM ${table} WHERE ${within}
+      AND quality='ANOMALY' AND json_extract(payload,'$.issues[#-1]')=? ORDER BY seq DESC LIMIT 1`).get(...scope,regimeChangeIssue);
+    const resetAt=Number(boundary?.seq??0);
+    const reference=this.db.prepare(`SELECT payload FROM ${table} WHERE ${within}
+      AND ((seq>? AND quality='VALID') OR seq BETWEEN ? AND ?) ORDER BY seq DESC LIMIT ?`)
+      .all(...scope,resetAt,resetAt-regimeSize+1,resetAt,referenceSize);
+    const recent=this.db.prepare(`SELECT payload FROM ${table} WHERE ${within} ORDER BY seq DESC LIMIT ?`)
+      .all(...scope,regimeSize-1);
+    const decode=(row:{payload?:SQLInputValue}):Reading=>JSON.parse(String(row.payload));
+    assessDeviation(reading,reference.map(decode),recent.map(decode),resetAt>0);
+  }
   private saveLive(v:Record<string,unknown>,origin:Origin,received:string,testTransport?:"USB"|"WIFI") {
     sourceKind(v,origin,testTransport);
     const ids=identity(v,origin), table=tableFor(origin);
@@ -67,19 +85,16 @@ export class Store {
         return {status:"duplicate",reading:prior};
       }
       if(existing.length===1&&existing[0].fingerprint===null&&prior.id===ids.id) {
-        const candidate=validateLive(v,origin,[],Math.max(0,ids.sequence-1),prior.receivedAt,testTransport);
+        const candidate=validateLive(v,origin,Math.max(0,ids.sequence-1),prior.receivedAt,testTransport);
         const fields=["id","stationId","sessionId","sequence","acquiredAt","timeSource","temperature","humidity","pressure","origin","classification","testTransport"] as const;
         if(fields.every(k=>JSON.stringify(candidate[k])===JSON.stringify(prior[k]))) return {status:"duplicate",reading:prior};
       }
       throw new Error("Conflicto de ID o secuencia: ya existe una lectura distinta.");
     }
-    const acquired=v.acquiredAt===undefined||v.acquiredAt===null?received:utc(v.acquiredAt);
-    const past=this.db.prepare(`SELECT payload FROM ${table} WHERE origin=? AND station=? AND session=?
-      AND seq<? AND quality='VALID' AND acquired>=? AND acquired<=? ORDER BY seq DESC LIMIT 60`)
-      .all(origin,ids.stationId,ids.sessionId,ids.sequence,iso(Date.parse(acquired)-3600000),acquired);
     const prev=this.db.prepare(`SELECT COALESCE(MAX(seq),0) AS seq FROM ${table}
       WHERE origin=? AND station=? AND session=? AND seq<?`).get(origin,ids.stationId,ids.sessionId,ids.sequence)!;
-    const reading=validateLive(v,origin,past.map(r=>JSON.parse(String(r.payload))),Number(prev.seq),received,testTransport);
+    const reading=validateLive(v,origin,Number(prev.seq),received,testTransport);
+    this.assessReading(reading);
     this.insert(reading,fingerprint);
     if(origin!=="SIMULATION") {
       const key=`connection:${origin}:${reading.stationId}`;

@@ -74,17 +74,6 @@ export function correlations(rows: Reading[]) {
   const pairs: [Variable, Variable][] = [["temperature","humidity"],["temperature","pressure"],["humidity","pressure"]];
   return pairs.map(([x,y])=>({x,y,n:clean.length,r:pearson(clean.map(r=>r[x] as number),clean.map(r=>r[y] as number))}));
 }
-const floors = {temperature:.25, humidity:1, pressure:.35};
-export function anomalies(values: Record<Variable, number|null>, recent: Reading[]) {
-  if (recent.length<15) return [];
-  return variables.flatMap(k => {
-    const v=values[k];
-    if(v===null) return [];
-    const past=recent.map(r=>r[k] as number);
-    const z=Math.abs(v-mean(past))/Math.max(std(past),floors[k]);
-    return z>3.5 ? [`${labels[k]} se apartó ${round(z)} desviaciones de las ${past.length} lecturas válidas anteriores.`] : [];
-  });
-}
 export function utc(value: unknown) {
   if (typeof value !== "string") throw new Error("Usa una fecha ISO 8601 con zona horaria.");
   const match = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.\d{1,3})?(Z|[+-]\d\d:\d\d)$/.exec(value);
