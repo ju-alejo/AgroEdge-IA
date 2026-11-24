@@ -11,7 +11,7 @@ import { labels, units, colors, variables, qualities, type Origin, type Reading 
 import { scenarios, type SimConfig } from "@/lib/simulator";
 import type { Store } from "@/lib/store";
 import type { getForecast } from "@/lib/forecast";
-import { ForecastPanel, Alerts, Analysis, InferencePanel, ConnectionPanel } from "./views";
+import { ForecastPanel, LocalForecastPanel, Alerts, Analysis, InferencePanel, ConnectionPanel } from "./views";
 import ClimatePanel from "./climate-panel";
 
 const sections=[
@@ -264,7 +264,7 @@ export default function Station() {
           <Panel className="ag-section"><div className="ag-heading"><h2>{labels[variable]} ({units[variable]})</h2><Badge tone="gray">{sourceNames[origin]}</Badge></div>
             <WeatherChart data={data} variable={variable} days={Number(range)>=1440||range==="all"}/><p className="ag-note">Los huecos indican valores ausentes o saltos detectados en la secuencia.</p></Panel></>}
         {view==="analysis"&&<Analysis data={data}/>}
-        {view==="forecast"&&<ForecastPanel forecast={forecast} error={forecastError} loading={forecastLoading} reload={()=>void loadForecast()}/>}
+        {view==="forecast"&&<><ForecastPanel forecast={forecast} error={forecastError} loading={forecastLoading} reload={()=>void loadForecast()}/><LocalForecastPanel/></>}
         {view==="tiny"&&<><Panel className="ag-section">{modeFilters}</Panel><InferencePanel reading={data?.inference??null} origin={origin}/></>}
         {view==="alerts"&&<Alerts readings={data?.anomalies??[]} latest={data?.latestInPeriod??null} origin={origin} forecast={forecastError?null:forecast}/>}
         {view==="connection"&&<ConnectionPanel snapshot={data} origin={origin} onRefresh={refresh}/>}

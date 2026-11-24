@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Activity, CloudRain, TriangleAlert, Wifi } from "lucide-react";
 import { api, Badge, Empty, fmt, Panel, ScatterPlot, SeriesChart } from "./shared";
 import { fullDate, sourceNames, type AppSnapshot, type ExternalForecast } from "./station";
 import { colors, labels, units, variables, type Origin, type Reading } from "@/lib/domain";
+import type { LocalForecast } from "@/lib/local-forecast";
 
 export function ForecastPanel({forecast,error,loading,reload}:{forecast:ExternalForecast|null;error:string;loading:boolean;reload:()=>void}) {
   if(!forecast||error) return <Panel className="ag-section">
@@ -49,9 +50,36 @@ export function InferencePanel({reading,origin}:{reading:Reading|null;origin:Ori
         {result.inferenceUs!==undefined&&<div><dt>Latencia de clasificación</dt><dd>{result.inferenceUs} µs</dd></div>}
         <div><dt>Estación y lectura</dt><dd>{reading.stationId} · sec. {reading.sequence}</dd></div>
       </dl>}
-    <p className="ag-note">{origin==="SIMULATION"?"La clase y la puntuación son valores de demostración.":result?.modelStatus==="PRELIMINARY"?
+    <p className="ag-note">{origin==="SIMULATION"?"La clase y la puntuación son valores de demostración.":result?.modelVersion.startsWith("exposure-pilot-")?
+      "Modelo piloto ajustado con una campaña de invernadero y exterior. La evaluación con sesiones independientes está pendiente.":result?.modelStatus==="PRELIMINARY"?
       "Modelo preliminar con referencias de humedad ambiental definidas para probar la integración. La puntuación expresa la separación entre clases.":
       "La puntuación corresponde a la salida reportada por el dispositivo."}</p>
+  </Panel>;
+}
+
+export function LocalForecastPanel() {
+  const [forecast,setForecast]=useState<LocalForecast|null>(null);
+  useEffect(()=>{
+    const controller=new AbortController();
+    api<LocalForecast|null>("forecast/secondary",undefined,controller.signal).then(setForecast).catch(()=>{});
+    return ()=>controller.abort();
+  },[]);
+  if(!forecast) return null;
+  const hours=forecast.hours.filter(row=>Date.parse(row.validAt)+3600000>Date.now());
+  return <Panel className="ag-section">
+    <div className="ag-heading"><h2>Pronóstico horario de Toca</h2><Badge tone="blue">Eltiempoen.net · EXTERNAL</Badge></div>
+    {hours.length?<details className="ag-options" open>
+      <summary>Consultar {hours.length} horas disponibles</summary>
+      <div className="ag-table-scroll"><table className="ag-table"><thead><tr>
+        <th>Hora · COL</th><th>Temperatura (°C)</th><th>Humedad (%)</th><th>Lluvia (mm)</th>
+        <th>Probabilidad (%)</th><th>Viento (km/h)</th><th>Cielo</th>
+      </tr></thead><tbody>{hours.map(row=><tr key={row.validAt}>
+        <td>{fullDate(row.validAt)}</td><td>{fmt(row.temperatureC)}</td><td>{fmt(row.humidityPct,0)}</td>
+        <td>{fmt(row.precipitationMm)}</td><td>{fmt(row.probabilityPct,0)}</td><td>{fmt(row.windKmh)}</td><td>{row.sky??"—"}</td>
+      </tr>)}</tbody></table></div>
+    </details>:<Empty title="Pronóstico archivado" detail="El periodo de la última captura ya terminó."/>}
+    <p className="ag-note">Captura {forecast.method==="HTTPS"?"HTTPS":"de archivo"} {fullDate(forecast.fetchedAt)}. La página combina seis modelos meteorológicos a través de Open-Meteo.</p>
+    <p className="ag-note"><a href={forecast.url} target="_blank" rel="noreferrer">Pronóstico original para Toca</a> · <a href="https://open-meteo.com/en/terms" target="_blank" rel="noreferrer">Atribución y licencia de los datos</a></p>
   </Panel>;
 }
 

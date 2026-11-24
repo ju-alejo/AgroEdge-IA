@@ -5,6 +5,7 @@ import { getStore } from "@/lib/store";
 import { exportFile, normalizeDelimiter, parseFile } from "@/lib/transfer";
 import { getForecast } from "@/lib/forecast";
 import { getClimateFeed } from "@/lib/agroclima";
+import { getLocalForecast } from "@/lib/local-forecast";
 import { usb } from "@/lib/usb";
 
 export const runtime="nodejs";
@@ -52,6 +53,7 @@ export async function GET(request:Request) {
   if(!isLocal(request)) return json({error:"Abre el panel desde localhost en el computador de la estación."},403);
   try {
     if(path==="agroclima") return json(getClimateFeed());
+    if(path==="forecast/secondary") return json(getLocalForecast());
     if(path==="forecast") {
       try { return json(await getForecast()); }
       catch(e){return json({error:"Pronóstico externo no disponible. "+safeMsg(e),source:"EXTERNAL"},503);}

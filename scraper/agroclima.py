@@ -51,7 +51,7 @@ def response_bytes(response, limit):
     return bytes(result)
 
 
-def access_delay(text):
+def access_delay(text, url=URL, user_agent=UA):
     """Evaluate REP groups for the fixed, ASCII bulletin path, including * and $ patterns."""
     groups = []
     agents, rules = [], []
@@ -68,7 +68,7 @@ def access_delay(text):
         elif agents:
             rules.append((key,val))
     groups.append((agents,rules))
-    product = UA.split("/")[0].lower()
+    product = user_agent.split("/")[0].lower()
     matching = []
     for names, directives in groups:
         named = [len(name) for name in names if name and name != "*" and name in product]
@@ -88,7 +88,7 @@ def access_delay(text):
                 exact = path.endswith("$")
                 pattern = path[:-1] if exact else path
                 glob = pattern.replace("[","[[]").replace("?","[?]")
-                if fnmatchcase(urlsplit(URL).path, glob if exact else glob + "*"):
+                if fnmatchcase(urlsplit(url).path, glob if exact else glob + "*"):
                     matches.append((len(pattern.replace("*","")),key == "allow"))
             elif key == "crawl-delay":
                 if not re.fullmatch(r"\d+(?:\.\d+)?",val):
@@ -106,9 +106,9 @@ def access_delay(text):
     return delay
 
 
-def download(session, sleep=time.sleep):
+def download(session, sleep=time.sleep, *, url=URL, robots=ROBOTS, user_agent=UA):
     def get(address):
-        return session.get(address, headers={"User-Agent": UA}, timeout=(8, 20),
+        return session.get(address, headers={"User-Agent": user_agent, "Accept": "text/html,text/plain,application/xhtml+xml"}, timeout=(8, 20),
                            stream=True, allow_redirects=False)
 
     def check(response):
@@ -116,16 +116,16 @@ def download(session, sleep=time.sleep):
             raise AccessError(f"HTTP {response.status_code}. Consulta detenida.",
                               retry_time(response.headers.get("Retry-After")))
 
-    with get(ROBOTS) as response:
+    with get(robots) as response:
         if response.status_code not in (404, 410):
             check(response)
             rules = response_bytes(response, MAX_HTML).decode("utf-8-sig")
             if "<html" in rules.lower() or "<!doctype html" in rules.lower():
                 raise AccessError("La respuesta no es un archivo robots.txt válido.")
-            delay = access_delay(rules)
+            delay = access_delay(rules, url, user_agent)
             if delay:
                 sleep(delay)
-    with get(URL) as response:
+    with get(url) as response:
         check(response)
         if response.headers.get("Content-Type", "").partition(";")[0].strip().lower() not in (
                 "text/html", "application/xhtml+xml"):
@@ -145,8 +145,7 @@ def live_bytes():
         raise ValueError(f"Conexión a {urlsplit(URL).hostname} fallida ({type(e).__name__}).") from e
 
 
-def fetch(db, loader=live_bytes, clock=lambda: datetime.now(timezone.utc)):
-    start = clock()
+def reserve_daily(db, start):
     stamp = iso(start)
     with db:
         db.execute("BEGIN IMMEDIATE")
@@ -156,6 +155,13 @@ def fetch(db, loader=live_bytes, clock=lambda: datetime.now(timezone.utc)):
         next_day = (start + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         next_time = max(start + timedelta(hours=23), next_day)
         db.execute("INSERT OR REPLACE INTO policy VALUES(1,?)", (iso(next_time),))
+
+
+def fetch(db, loader=live_bytes, clock=lambda: datetime.now(timezone.utc)):
+    start = clock()
+    stamp = iso(start)
+    if waiting := reserve_daily(db, start):
+        return waiting
     try:
         raw = loader()
         with db:
