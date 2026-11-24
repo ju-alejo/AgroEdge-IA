@@ -4,6 +4,8 @@ La [bitácora de la Fase A](fase-a-2026-11-23.md) contiene el último corte de l
 
 La [primera campaña experimental](campana-01-2026-11-23.md) documenta el respaldo físico, las 1.729 lecturas y el tratamiento de las ráfagas y del cambio de ambiente.
 
+El [replay del detector](detector-regimen.md) explica la renovación automática de la referencia y la comparación entre las banderas originales y revisadas.
+
 ## Estación y alcance
 
 La estación mide temperatura del aire, humedad relativa y presión atmosférica. El pronóstico horario de Open-Meteo y el boletín ENSO de NOAA llegan al dashboard por separado. El ESP32 clasifica con las lecturas locales y puede hacerlo sin Internet. En el dashboard, la decisión de riego sigue requiriendo observación del lote y necesidades del cultivo. [Open-Meteo](https://open-meteo.com/en/docs) · [Discusión ENSO del CPC](https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc_Sp.shtml) · [FAO 56](https://www.fao.org/4/X0490E/X0490E00.htm)
@@ -86,7 +88,7 @@ Un Raspberry Pi Pico RP2040 ofrece 264 KiB de SRAM, 2 MiB de Flash, I²C y USB. 
 
 Mantén el puente y la cola durable de envíos en el equipo con el puerto COM. Para una futura versión accesible por URL, publica un servicio de ingestión HTTPS autenticado por dispositivo, con rotación de credenciales, reintentos e idempotencia por `(origen, estación, sesión, secuencia)`. Usa una base administrada para consultas remotas, conserva hora de adquisición y recepción y protege la interfaz de lecturas con autenticación. La página puede consumir ese servicio con acceso de solo lectura. Prueba pérdida de conexión, recuperación de cola, límites y permisos en un entorno local antes de migrar. La subida de archivos del lote y la publicación requieren aprobación expresa.
 
-El [borrador IEEE en inglés](ieee/agroedge.tex) recoge la arquitectura y las mediciones de compilación. Para la versión de 6–10 páginas quedan por incorporar el diagnóstico del beneficiario, la evaluación del conjunto propio, el ensayo en placa y la medición de consumo.
+Las bitácoras técnicas reúnen los resultados para su posterior integración académica. El [manuscrito histórico](ieee/agroedge.tex) se conserva. Las indicaciones institucionales y la suspensión del trabajo de edición y compilación constan en [AGENTS.md](../AGENTS.md).
 
 ## Verificación del 23 de noviembre de 2026
 
