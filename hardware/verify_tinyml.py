@@ -1,4 +1,4 @@
-"""Collect the ESP32-S3 benchmark and optionally replay held-out feature vectors."""
+"""Collect the ESP32-S3 benchmark and optionally replay feature vectors for device parity."""
 
 import argparse
 from datetime import datetime, timezone
@@ -129,7 +129,7 @@ def main():
                 if response["features"] != features or response["modelVersion"] != data["version"]:
                     raise ValueError("El dispositivo devolvió un vector o versión distinto.")
                 predictions.append({**vector, "device_index": response["index"]})
-            report["replay"] = {"predictions": predictions,
+            report["replay"] = {"purpose": data.get("purpose", "held_out_vectors"), "predictions": predictions,
                                 "mismatches": sum(row["device_index"] != row["expected_index"] for row in predictions)}
     with args.out.open("x", encoding="utf-8") as file:
         json.dump(report, file, ensure_ascii=False, indent=2)
