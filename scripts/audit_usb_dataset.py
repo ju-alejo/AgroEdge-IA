@@ -9,7 +9,7 @@ from pathlib import Path
 import sqlite3
 from statistics import mean, median
 
-from scripts.tinyml_dataset import MAX_GAP, WINDOW, utc
+from scripts.tinyml_dataset import MAX_GAP, MIN_GAP, WINDOW, utc
 
 
 def read_snapshot(path):
@@ -38,17 +38,19 @@ def summarize_session(records):
     first_classified_window = None
     previous = None
     for (row, ingested), stamp in zip(records, stamps, strict=True):
+        continuous = True
         if previous:
             sequence_gap = row["sequence"] - previous[0] - 1
             seconds = (stamp - previous[1]).total_seconds()
             gaps += max(0, sequence_gap)
             if sequence_gap == 0:
                 intervals.append(seconds)
-            if sequence_gap or not 0 < seconds <= MAX_GAP.total_seconds():
+            continuous = sequence_gap == 0 and MIN_GAP.total_seconds() <= seconds <= MAX_GAP.total_seconds()
+            if not continuous:
                 runs = dict.fromkeys(runs, 0)
         quality = row["quality"]
         runs["physical"] = runs["physical"] + 1 if ingested and quality in ("VALID", "ANOMALY") else 0
-        runs["training"] = runs["training"] + 1 if ingested and quality == "VALID" else 0
+        runs["training"] = runs["training"] + 1 if ingested and continuous and quality == "VALID" else 0
         if runs["training"] == WINDOW:
             training_windows += 1
             runs["training"] = 0
@@ -68,6 +70,7 @@ def summarize_session(records):
             "ingested": sum(ingested for _, ingested in records),
             "time_sources": Counter(row["timeSource"] for row, _ in records),
             "consecutive_intervals_s": distribution(intervals), "intervals_over_8_s": sum(i > 8 for i in intervals),
+            "intervals_under_4_s": sum(i < 4 for i in intervals),
             "intervals_non_increasing": sum(i <= 0 for i in intervals),
             "values": {key: distribution([row[key] for row, _ in records if row[key] is not None])
                        for key in ("temperature", "humidity", "pressure")},

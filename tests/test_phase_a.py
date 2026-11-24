@@ -7,10 +7,28 @@ import unittest
 
 from hardware.verify_tinyml import benchmark_metrics, verify_stream
 from scripts.audit_usb_dataset import read_snapshot, summarize_session
+from scripts.process_usb_campaign import derive
 from scripts.tinyml_dataset import annotations, utc
 
 
 class PhaseATest(unittest.TestCase):
+    def test_processed_campaign_marks_transfer_and_preserves_unlabeled_measurements(self):
+        start = utc("2026-11-23T18:00:00-05:00")
+        records = []
+        for i, offset in enumerate((0, 5, 500, 500.1, 510), start=1):
+            stamp = (start + timedelta(seconds=offset)).isoformat()
+            records.append({"id": f"qa-{i}", "stationId": "QA", "sessionId": "BOOT", "sequence": i,
+                            "timeSource": "RECEIPT", "origin": "USB", "acquiredAt": stamp, "receivedAt": stamp,
+                            "temperature": 20, "humidity": 80, "pressure": 736, "quality": "ANOMALY", "issues": []})
+        rows, incidents, counts = derive(records, "qa-campaign", start + timedelta(seconds=5),
+                                         start + timedelta(seconds=20), start + timedelta(seconds=505))
+        self.assertEqual([r["phase"] for r in rows], ["before_move", "transfer", "settling", "settling",
+                                                       "after_provisional_settling"])
+        self.assertEqual([i["receipt_flag"] for i in incidents], ["long_interval", "short_interval", "long_interval"])
+        self.assertEqual(counts["quality_original"], {"ANOMALY": 5})
+        self.assertTrue(all(row["rain_observation"] == "" and row["split_group"] == "qa-campaign"
+                            and row["ml_split"] == "unassigned_pilot" for row in rows))
+
     def test_read_only_path_does_not_create_a_database(self):
         with TemporaryDirectory() as directory:
             missing = Path(directory) / "missing.sqlite"

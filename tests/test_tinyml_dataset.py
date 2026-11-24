@@ -5,6 +5,16 @@ from scripts.tinyml_dataset import LABELS, PARTITIONS, annotations, quantize, tr
 
 
 class TinyMLDatasetTest(unittest.TestCase):
+    def test_buffered_receipts_do_not_form_sensor_windows(self):
+        start = utc("2026-11-23T19:00:00-05:00")
+        rows = [{"id": f"qa-{i}", "sessionId": "QA", "sequence": i + 1,
+                 "acquiredAt": (start + timedelta(seconds=offset)).isoformat(),
+                 "temperature": 20, "humidity": 80, "pressure": 736, "quality": "VALID"}
+                for i, offset in enumerate((0, 80, 80.1, 80.2, 80.3, 80.4, 80.5, 85, 90, 95, 100, 105, 110))]
+        period = {"QA": [(start, start + timedelta(minutes=5), {"label": "rain", "event": "test"})]}
+        result = windows(rows, period, start + timedelta(days=1), start + timedelta(days=2))
+        self.assertEqual([w["ids"] for w in result["train"]], [[f"qa-{i}" for i in range(7, 13)]])
+
     def test_split_respects_session_event_labels_and_missing_rows(self):
         start = utc("2026-11-19T12:00:00Z")
         cutoffs = [start + timedelta(days=day) for day in (1, 2)]

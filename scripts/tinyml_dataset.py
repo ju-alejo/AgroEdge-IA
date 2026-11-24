@@ -18,6 +18,7 @@ LABELS = ("no_rain", "rain")
 DEVICE_LABELS = ("Patrón sin lluvia observada", "Patrón con lluvia observada")
 PARTITIONS = ("train", "validation", "test")
 WINDOW = 6
+MIN_GAP = timedelta(seconds=4)
 MAX_GAP = timedelta(seconds=8)
 EMBARGO = timedelta(minutes=30)
 MIN_PER_CLASS = 10
@@ -94,10 +95,9 @@ def windows(rows, periods, train_end, validation_end):
         recent = deque(maxlen=WINDOW)
         previous, seq = None, None
         for row, stamp in zip(group, times):
-            if previous is not None and (not timedelta(0) < stamp - previous <= MAX_GAP or row["sequence"] != seq + 1):
-                recent.clear()
+            continuous = previous is None or (MIN_GAP <= stamp - previous <= MAX_GAP and row["sequence"] == seq + 1)
             previous, seq = stamp, row["sequence"]
-            if row["quality"] != "VALID":
+            if not continuous or row["quality"] != "VALID":
                 recent.clear()
                 continue
             recent.append((row, stamp))
@@ -211,7 +211,8 @@ def main():
     centroids, quantized, counts, events, summary, vectors = train(groups)
     dataset = {"protocol": "precipitation-v1", "station": args.station, "label_order": LABELS,
                "cutoffs": [args.train_end.isoformat(), args.validation_end.isoformat()],
-               "embargo_minutes": EMBARGO.seconds // 60, "annotation_sha256": hashlib.sha256(labels_bytes).hexdigest(),
+               "embargo_minutes": EMBARGO.seconds // 60, "receipt_interval_seconds": [MIN_GAP.seconds, MAX_GAP.seconds],
+               "annotation_sha256": hashlib.sha256(labels_bytes).hexdigest(),
                "readings_sha256": hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest(), "partitions": groups}
     snapshot = json.dumps(dataset, ensure_ascii=False, indent=2)
     version = "precip-v1-" + hashlib.sha256(snapshot.encode()).hexdigest()[:16]
