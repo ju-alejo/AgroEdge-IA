@@ -140,6 +140,7 @@ def metrics(rows, predictions, labels=LABELS):
         classes[label] = {"precision": tp / predicted if predicted else None, "recall": tp / actual,
                           "f1": 2 * tp / (predicted + actual), "support": actual}
     return {"confusion": matrix, "by_class": classes, "accuracy": sum(matrix[i][i] for i in range(len(labels))) / len(rows),
+            "balanced_accuracy": statistics.mean(value["recall"] for value in classes.values()),
             "macro_f1": statistics.mean(value["f1"] for value in classes.values())}
 
 
