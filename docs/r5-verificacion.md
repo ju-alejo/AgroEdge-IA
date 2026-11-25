@@ -79,3 +79,23 @@ La programación se probó con reloj controlado. La tarea de Windows y el flujo 
 - Tras `PRAGMA quick_check`, se copió la base R5 de verificación a `data/agroclima.sqlite` mediante el respaldo de SQLite y creación exclusiva del destino. La API `GET /api/agroclima` leyó la revisión local, con `bundled=false` y `live_seen` informado. `BulletinTool` encontró la misma revisión en la API por hash.
 - La tarea local **AgroEdge IA - Boletin R5** quedó programada diariamente a las 16:30, hora de Bogotá. Su inicio manual el 23 de noviembre devolvió código `0` dentro de la ventana de espera. La primera consulta programada está prevista el 24 de noviembre y queda pendiente verificar su resultado con `Get-ScheduledTaskInfo` y `scraper/agroclima.py status`.
 - El adaptador de Open-Meteo recuperó por HTTPS el pronóstico para el punto de referencia de Toca y devolvió ambos horizontes de 24 y 48 horas. La previsión se mantiene en su ruta independiente.
+
+## Ejecución automática y deduplicación · 24 de noviembre de 2026
+
+La tarea **AgroEdge IA - Boletin R5** se ejecutó a las 16:30:01 de Bogotá con `LastTaskResult=0`. La siguiente ejecución quedó para el 25 de noviembre a las 16:30:00. Se contrastaron el Programador de tareas, el registro `status` y la captura del usuario. Las dos consultas HTTPS recuperaron el boletín del 12 de noviembre. SQLite conserva una sola edición y dos ejecuciones.
+
+| Fecha de recuperación UTC | Resultado | Ediciones acumuladas |
+| --- | --- | ---: |
+| 23 de noviembre, 22:19:18 | `NUEVA` | 1 |
+| 24 de noviembre, 21:30:06 | `DUPLICADA` | 1 |
+
+Ambas ejecuciones tienen revisión `faf0fd27e824d3497cb107603392756239b285754a9fa727ec017a1f07f115e6` y SHA-256 del HTML `7d3f2388a01d7d6015ecadf38edf2f98252a480eac03494878fb1188cbd01b10`. La captura `R5_NOAA_Deduplicacion_2026-11-24.png` y `R5-verificacion-2026-11-24.json` están en `C:/AgroEdge/output/evidencia/R5_WebScraping`.
+
+Se registró la tarea independiente **AgroEdge IA - Pronostico Toca R5** a las 20:45 de Bogotá. La primera ventana elegible de la base era el 24 a las 20:40:34. El Programador confirmó la primera ejecución prevista para el 24 a las 20:45. El scraper conserva el límite persistente, comprobación de `robots.txt`, atribución y respeto de `Retry-After`. El registro de esa primera ejecución queda pendiente hasta que se cumpla el horario.
+
+La reproducción de la captura HTML del 23 en una SQLite de ensayo produjo `NUEVA` y `REPETIDA`, con la misma revisión `e84c8bd42792275ae17476a8e84feefda810910bebc31d72a920f3de7a459c63` y 48 horas. La prueba usó el HTML archivado y el 24 quedó reservado para la siguiente consulta HTTPS elegible.
+
+```powershell
+Get-ScheduledTaskInfo -TaskName 'AgroEdge IA - Boletin R5','AgroEdge IA - Pronostico Toca R5'
+& .venv/r5-python/Scripts/python.exe scraper/agroclima.py status
+```
