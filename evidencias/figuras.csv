@@ -1,0 +1,10 @@
+id,archivo,fecha_bogota,descripcion
+campo_entrenamiento,campana_final/grafica-entrenamiento.png,2026-11-24,Series auditadas de las sesiones A y B reservadas para entrenamiento.
+campo_validacion,campana_final/grafica-validacion.png,2026-11-24,Series de las sesiones C y D con la incidencia observada durante el traslado de C.
+campo_prueba,campana_final/grafica-prueba.png,2026-11-24,Series auditadas de las sesiones E y F reservadas para prueba.
+detector_piloto,datasets/2026-11-23_piloto/Procesado_v2/comparacion-detector.png,2026-11-23,Comparación del detector original y la revisión adaptativa en el piloto.
+usb_modelo,campana_final/modelo-tflm/integracion-usb/dashboard-tinyml-fisico.png,2026-11-24,Clasificación real de la ESP32-S3 recibida en AgroEdge IA por USB.
+demo_invernadero,demostraciones/R3_TinyML_Invernadero.png,2026-11-24,Perfil de invernadero durante la demostración física posterior a la campaña.
+demo_exterior,demostraciones/R3_TinyML_Exterior.png,2026-11-24,Perfil exterior durante la demostración física posterior a la campaña.
+noaa_deduplicacion,meteorologia/R5_NOAA_Deduplicacion_2026-11-24.png,2026-11-24,Consulta automática del boletín ENSO y deduplicación del contenido archivado.
+toca_actualizado,meteorologia/Actualizacion_Toca_2026-11-24/dashboard-captura-actualizada.png,2026-11-24,Pronóstico de Toca actualizado por HTTPS con 27 horas vigentes en el dashboard.

@@ -2,17 +2,23 @@
 
 #include "classifier.h"
 
-#if __has_include("tflm_model_data.h")
+#if !__has_include("tflm_model_data.h")
+#error "Falta tflm_model_data.h del modelo definitivo exposure-tflm-2c4870d61d3f."
+#endif
+
 #include <Chirale_TensorFlowLite.h>
 #include <tensorflow/lite/micro/micro_interpreter.h>
 #include <tensorflow/lite/micro/micro_mutable_op_resolver.h>
 #include <tensorflow/lite/schema/schema_generated.h>
 #include <math.h>
+#include <string_view>
 
 #include "tflm_model_data.h"
 
 namespace agroedge {
 
+static_assert(std::string_view(modelVersion) == "exposure-tflm-2c4870d61d3f", "Version del modelo TinyML incorrecta.");
+static_assert(sizeof(modelFlatbuffer) == 1160, "Tamano del modelo TinyML incorrecto.");
 constexpr char inferenceBackend[] = "TFLITE_MICRO";
 constexpr unsigned modelBytes = sizeof(modelFlatbuffer);
 constexpr unsigned weightsBytes = 0;  // Weights are serialized inside the FlatBuffer.
@@ -60,26 +66,3 @@ inline bool infer(Features features, unsigned &index, double &score, int &logit)
 }
 
 }  // namespace agroedge
-
-#else
-#include "model.h"
-
-namespace agroedge {
-
-constexpr char inferenceBackend[] = "CENTROIDS";
-constexpr unsigned modelBytes = sizeof(centroids);
-constexpr unsigned weightsBytes = sizeof(centroids);
-constexpr unsigned arenaBytes = 0;
-inline bool beginInference() { return true; }
-inline unsigned arenaUsedBytes() { return 0; }
-
-inline bool infer(Features features, unsigned &index, double &score, int &logit) {
-  const auto prediction = classify(features, centroids);
-  index = prediction.index;
-  score = prediction.score();
-  logit = 0;
-  return true;
-}
-
-}  // namespace agroedge
-#endif

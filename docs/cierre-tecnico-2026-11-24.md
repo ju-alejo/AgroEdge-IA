@@ -1,5 +1,7 @@
 # AgroEdge IA · Campaña de exposición y TensorFlow Lite Micro
 
+Las secciones de compilación describen el montaje experimental registrado el 24 de noviembre. La [guía del firmware definitivo](../hardware/esp32_tinyml/README.md) describe el sketch de distribución con el encabezado obligatorio y las bibliotecas fijadas.
+
 ## Evidencia de campo y calidad
 
 El 24 de noviembre se registraron 2.823 lecturas USB de AHT20 y BMP280 en seis arranques. El respaldo se creó por la API de backup de SQLite desde la fuente en modo de solo lectura, incluyendo las transacciones del WAL ya confirmadas. Pasó `integrity_check` y obtuvo SHA-256 `4b31d22ed54b6dff9cd8e37a398f0ade531850fdcc52dfe3eb5da7e390f60116`. Los cinco pares CSV/Excel coinciden por ID y por todos los campos exportados con el respaldo. Se conserva el dataset v2 del día 23 como campaña piloto independiente.

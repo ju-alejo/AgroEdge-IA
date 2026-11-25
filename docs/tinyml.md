@@ -1,5 +1,7 @@
 # AgroEdge IA · Firmware candidato y verificación local
 
+Esta bitácora sigue la evolución de los candidatos experimentales. Para compilar la distribución actual utiliza la [guía del firmware definitivo](../hardware/esp32_tinyml/README.md), que incorpora exclusivamente el modelo TFLite Micro verificado.
+
 La [bitácora de la Fase A](fase-a-2026-11-23.md) contiene el último corte de lecturas, el respaldo del firmware operativo y el procedimiento de prueba para el perfil USB-UART actualmente conectado.
 
 La [primera campaña experimental](campana-01-2026-11-23.md) documenta el respaldo físico, las 1.729 lecturas y el tratamiento de las ráfagas y del cambio de ambiente.

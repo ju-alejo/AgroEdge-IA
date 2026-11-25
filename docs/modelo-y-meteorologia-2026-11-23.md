@@ -1,5 +1,7 @@
 # AgroEdge IA · Modelo de exposición y contexto meteorológico
 
+El modelo de esta bitácora es una referencia del piloto. El [firmware definitivo](../hardware/esp32_tinyml/README.md) usa el modelo TFLite Micro de la campaña del 24.
+
 ## R3 y R4 · Piloto con mediciones propias
 
 El piloto `exposure-pilot-d28443a228a8` aprende dos perfiles de exposición de la campaña S01 del 23 de noviembre de 2026. La anotación de campo del traslado cerca de las 19:24 permite identificar invernadero y exterior. El ajuste usó 197 ventanas de seis lecturas USB distintas, 168 de invernadero y 29 de exterior. Excluyó los primeros cinco minutos, la transición y la estabilización provisional, los intervalos de recepción incierta y las filas sin calidad revisada `VALID`. La campaña completa conserva sus 1.729 registros y sus banderas originales. [Dataset v2 y replay del detector](detector-regimen.md)

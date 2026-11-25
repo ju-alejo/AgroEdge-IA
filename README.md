@@ -1,115 +1,118 @@
 # AgroEdge IA
 
-Estación agroclimática universitaria para Toca, Boyacá. La aplicación adapta la beta de DataCity AI y reutiliza su estructura Next.js y React, barra lateral, tarjetas, gráficas Recharts, cálculos estadísticos, detección de anomalías y análisis temporal.
+AgroEdge IA es una estación de monitoreo agroclimático con inferencia local para Toca, Boyacá. La ESP32-S3 mide temperatura, humedad relativa y presión atmosférica, clasifica perfiles de exposición de **invernadero** y **exterior**, y envía las lecturas a un panel web local. El panel permite comparar las condiciones medidas con pronósticos y boletines que conservan su procedencia y fecha.
 
-La [guía de TinyML y verificación del proyecto](docs/tinyml.md) describe el firmware candidato para AHT20/BMP280, el protocolo de captura, la evaluación en placa y la consulta Java del boletín ENSO.
+## Problema y objetivos
 
-## Versión 0.2.1 · Extracción del boletín con BeautifulSoup
+Las condiciones bajo cubierta y al aire libre pueden diferir del pronóstico municipal. El proyecto busca hacer visibles esas diferencias mediante una estación accesible y trazabilidad de las lecturas. Su aporte para el trabajo agrícola es contextualizar el ambiente observado y revisar cambios de exposición junto al pronóstico. Las salidas se interpretan con observación de campo y criterio agronómico. La caracterización y las encuestas del equipo se incorporan por separado al documento académico.
 
-El módulo R5 utiliza Requests para consultar el HTML por HTTPS y BeautifulSoup (`bs4`) para extraer y limpiar el texto del que se obtienen la fecha, el estado ENSO y la sinopsis. Si ya ejecutaste la versión 0.2.0, vuelve a instalar las dependencias de `scraper/requirements.txt` en tu entorno Python para incorporar BeautifulSoup.
+- Registrar variables ambientales con trazabilidad desde la estación hasta la exportación.
+- Ejecutar un modelo int8 sobre la ESP32-S3 y verificar su concordancia con TensorFlow Lite en el PC.
+- Integrar el pronóstico municipal, el historial de la estación y el contexto ENSO mediante fuentes identificables.
 
-El 22 de noviembre de 2026 pasaron las nueve pruebas de R5 con BeautifulSoup 4.14.3 y la comprobación del panel con el boletín recién extraído. [Resultados y comandos de verificación](docs/r5-verificacion.md#versión-021)
+## Arquitectura y tecnologías
 
-## Boletín agroclimático externo
-
-El panel principal muestra la discusión mensual del ENSO en español, su fecha de publicación y un enlace al Climate Prediction Center de NOAA. Incluye la edición archivada del 12 de noviembre de 2026 para poder abrir el panel sin Internet. Al recopilar o sincronizar una edición, el panel lee el archivo local de boletines. El botón **Ver lluvia prevista en Toca** abre el pronóstico de Open-Meteo de 24 y 48 horas.
-
-Extrae esta versión en una carpeta nueva. La base de los sensores continúa en la instalación que ya utilizas. Para consultar el mismo historial desde la nueva versión, detén la instancia anterior, conserva una copia de seguridad de su carpeta de datos y configura `AGROEDGE_DB` en `.env.local` con la ruta absoluta al archivo existente. Ejecuta una sola instancia de la aplicación sobre esa base. Para el ESP32-S3 con AHT20 y BMP280 puedes conservar el firmware que ya transmite las mediciones. Los sketches de ejemplo del ZIP anterior se conservan para quienes usan BME280.
-
-En la terminal de VS Code, desde la carpeta que contiene `package.json`, puedes reproducir la extracción de la edición incluida y después consultar la web con Python 3.10 o superior.
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r scraper\requirements.txt
-.\.venv\Scripts\python.exe scraper\agroclima.py capture tests\fixtures\noaa-enso-es-2026-11-12.html
-.\.venv\Scripts\python.exe scraper\agroclima.py fetch
-.\.venv\Scripts\python.exe scraper\agroclima.py status
+```mermaid
+flowchart LR
+  S["AHT20 y BMP280 por I²C"] --> M["ESP32-S3 · Arduino C++ · TensorFlow Lite Micro"]
+  M -->|UART USB, JSON por línea| B["Puente Python · PySerial"]
+  B --> N["Backend local Next.js · TypeScript"]
+  H["Contrato HTTP Wi-Fi autenticado"] --> N
+  N --> DB["SQLite · mediciones e inferencias"]
+  N --> UI["React · historial, gráficas, alertas y exportación"]
+  R["NOAA y Eltiempoen.net · Requests y BeautifulSoup"] --> W["SQLite · boletines y revisiones"]
+  W --> N
+  O["Open-Meteo · API REST"] --> N
+  N --> J["Cliente Java · índice de boletines"]
 ```
 
-Los boletines se guardan en `data/agroclima.sqlite`. El panel relee esa base cada minuto mientras está abierto. Si ya tienes instalado el proyecto anterior, sigue los pasos de ejecución de Windows de abajo en la carpeta nueva. La documentación R5 incluye la consulta periódica, la sincronización, las pruebas y el alcance de la verificación. [Guía R5](docs/r5.md) · [Evidencia de verificación](docs/r5-verificacion.md)
+La aplicación presenta gráficas, filtros por estación, sesión y fecha, exportación CSV/XLSX y alertas de calidad. El detector adaptativo marca desviaciones estadísticas después de validar las muestras. El origen y el tipo de dato distinguen lecturas reales, simulación y pruebas de transporte. La integración física del modelo se comprobó mediante **USB**. El contrato Wi-Fi se verificó por HTTP con fixtures de simulación.
 
-## Cambios de la versión 0.1.1
+| Componente | Estructura y uso |
+| --- | --- |
+| Firmware | Ventana circular de seis muestras y sumas incrementales. La inserción y la obtención de características cuestan O(1), y el almacenamiento escala con el tamaño de la ventana. |
+| SQLite | Claves únicas para la identidad de medición y las revisiones, índices B-tree para consultas por origen y tiempo, y transacciones para reservar las actualizaciones. |
+| Java | `HashMap` por revisión para acceso promedio O(1) y `TreeMap` por fecha para intervalos en O(log D + K), con D fechas y K resultados. |
 
-- Al cambiar de modo o filtro, la aplicación descarta las respuestas de consultas anteriores. La lectura destacada de Alertas pertenece al periodo seleccionado.
-- La adquisición rechaza declaraciones de procedencia incompatibles con el transporte. Reintentar una misma prueba por un canal distinto genera un conflicto de registro.
-- La actualización admite la base SQLite y las exportaciones CSV y Excel de la versión 0.1.0. Para trasladar el historial a otra carpeta, detén el servidor y copia `data/agroedge.sqlite` junto a los demás archivos de `data` que existan.
+[Arquitectura y contratos](docs/integracion.md) · [Detector adaptativo](docs/detector-regimen.md) · [Índice Java](java/r5/src/BulletinIndex.java)
 
-## Ejecutar en Windows con VS Code
+## Instalación local
 
-1. Instala **Node.js 24 LTS** (24.14 o posterior). Instala también Python 3 para usar el puente USB y reproducir la prueba serial.
-2. Extrae el ZIP. En VS Code abre la carpeta `AgroEdge-IA`, donde está `package.json`.
-3. En una terminal PowerShell de VS Code ejecuta:
+Usa Node.js **24.14.0 o posterior dentro del rango declarado en `package.json`**, npm y Python 3 para el puente y los scrapers. La distribución se verificó con Node.js 24.14.0, npm 11.9.0 y Python 3.14.3. Java 17 con Gson 2.15.0 es necesario para el cliente de boletines. El firmware requiere Arduino CLI y ESP32 by Espressif Systems 4.0.0. La guía del sketch fija el resto de dependencias y el perfil probado.
 
-   ```powershell
-   node --version
-   npm.cmd ci
-   npm.cmd run dev
-   ```
-
-4. Abre [http://127.0.0.1:5173](http://127.0.0.1:5173). Selecciona **Simulación**, elige un escenario y pulsa **Iniciar**. El historial se crea conforme llegan registros. Para cargar los ejemplos incluidos, entra en **Historial y registros** y usa **Importar archivo**.
-5. Para verificar una compilación de producción, detén el servidor de desarrollo y ejecuta:
-
-   ```powershell
-   npm.cmd run check
-   npm.cmd run build
-   npm.cmd run start
-   ```
-
-`npm.cmd` evita depender de la política de ejecución de scripts PowerShell de Windows. La base se crea en `data/agroedge.sqlite`. Usa el mismo directorio de trabajo cada vez. Para hacer una copia de la base, detén primero el servidor y copia la carpeta `data` completa.
-
-## Modos
-
-| Modo | Cómo funciona | Etiqueta del registro |
-| --- | --- | --- |
-| Simulación | Elige escenario, semilla, intervalo y amplitud. Iniciar o reiniciar abre una sesión. Pausar y reanudar conserva la misma secuencia. Cambiar la velocidad modifica el intervalo, sin cambiar la progresión de valores de esa sesión. | `SIMULATION` y `SIMULATED` |
-| USB | Instala el puente de Python, conecta Arduino UNO o ESP32, cierra el monitor serial del IDE y selecciona el puerto COM en el panel. | `USB` y `REAL` |
-| Wi-Fi | Activa recepción LAN y envía JSON desde el ESP32 a la IP local real del equipo. | `WIFI` y `REAL` |
-
-El simulador genera conforme el panel está abierto y consultando la estación. Tras cerrar el panel o suspender el equipo, retoma en el momento actual sin agregar un historial ficticio durante la desconexión. La semilla, el escenario y la amplitud reproducen los valores por ordinal. Las fechas e identificadores de cada sesión se asignan al ejecutarla.
-
-En el historial puedes seleccionar estación, sesión, fechas y calidad. Las fechas del filtro se interpretan en Colombia y el día final es inclusivo. Los archivos conservan fecha UTC, fuente y orden. Al seleccionar columnas, Excel oculta la columna de recuperación y CSV la adjunta al final, de modo que un archivo parcial también puede recuperar el registro íntegro. El ZIP trae un CSV y un XLSX de demostración generados por la aplicación.
-
-## Configurar USB
+Desde la raíz del código, en PowerShell:
 
 ```powershell
-python --version
-python -m pip install -r hardware/requirements.txt
+npm.cmd ci
+py -m venv .venv-entrega
+$python = (Resolve-Path .venv-entrega/Scripts/python.exe).Path
+& $python -m pip install -r hardware/requirements.txt -r scraper/requirements.txt
+$env:AGROEDGE_PYTHON = $python
+npm.cmd run dev
 ```
 
-En **Adquisición por USB** pulsa **Buscar puertos**, selecciona el COM y conecta a **115200 baudios** si usas el ejemplo. Si Python no está en PATH, configura `AGROEDGE_PYTHON` con la ruta absoluta de `python.exe`. El puente lee una línea JSON por muestra y trata de restablecer la conexión si se pierde el puerto. La aplicación muestra la última recepción, los errores y el tiempo sin comunicación. La recepción USB funciona con el servicio local y Python.
+Abre `http://127.0.0.1:5173`. La plataforma crea la SQLite de mediciones en `data/`. La configuración de ejemplo en [`.env.example`](.env.example) identifica las rutas opcionales y las variables del sistema. Configura un token propio únicamente si usas ingreso HTTP autenticado desde otro cliente.
 
-## Configurar Wi-Fi en la red del proyecto
+## Conexiones y adquisición USB
 
-1. Crea `.env.local` a partir de `.env.example`. Asigna a `AGROEDGE_DEVICE_TOKEN` un valor aleatorio largo y conserva el mismo valor en el firmware o servicio Java. Puedes generar un token en la terminal con `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
-2. Conecta computador y ESP32 a la misma red local. Ejecuta `ipconfig` y copia la dirección **IPv4 del adaptador conectado a esa red**. Si Windows solicita permiso de red para el servidor, utiliza el perfil de red privada y limita el puerto 5173 a la red del laboratorio.
-3. Ejecuta `npm.cmd run dev:lan` o, después de compilar, `npm.cmd run start:lan`. Accede al panel desde `http://127.0.0.1:5173` en el mismo equipo. Usa la IPv4 encontrada en la URL del firmware ESP32.
-4. En Arduino IDE instala la biblioteca **Adafruit BME280 Library** y sus dependencias. Abre el ejemplo de la carpeta de hardware correspondiente. En ESP32 configura red, puerto, token e ID de estación. En el UNO el puente asigna la hora de recepción. Para enviar por Wi-Fi el ESP32 sincroniza el reloj mediante NTP.
+```text
+ESP32-S3 3V3   ── VCC  AHT20     ── VCC  BMP280
+ESP32-S3 GND   ── GND  AHT20     ── GND  BMP280
+ESP32-S3 GPIO8 ── SDA  AHT20     ── SDA  BMP280
+ESP32-S3 GPIO9 ── SCL  AHT20     ── SCL  BMP280
+PC             ── USB-UART      ── ESP32-S3
+```
 
-Usa la recepción HTTP de ejemplo dentro de la red privada del laboratorio. El token viaja por HTTP en la configuración LAN y el filtro de nombre de host del panel es una comodidad local. Mantén el puerto fuera de Internet. Si cambias de red, confirma la IP y el acceso al puerto antes de reiniciar el ESP32.
+El perfil probado usa el AHT20 con dirección `0x38` y el BMP280 con `0x77`, ambos a 3,3 V. La conexión serial es **115200 baudios, 8N1**, con un objeto JSON UTF-8 por línea. En el dashboard selecciona **Adquisición por USB**, abre **Conexión**, elige el puerto que enumere Windows y conecta. El ensayo de referencia usó COM8, y el número puede cambiar entre equipos. Con USB sin reloj propio, `RECEIPT` identifica la hora de recepción como fuente temporal. Cada arranque identifica una sesión nueva.
 
-## Pronóstico y alertas
+Al arrancar, el clasificador reúne seis muestras. Comprueba en **Clasificación TinyML** la versión `exposure-tflm-2c4870d61d3f`. La salida es un perfil de exposición y su puntuación es el margen cuantizado al umbral. La guía del firmware incluye dependencias, FQBN, perfil de Flash y PSRAM, y los pasos para compilar una placa de ensayo. [Firmware definitivo](hardware/esp32_tinyml/README.md)
 
-El panel consulta [Open-Meteo](https://open-meteo.com/en/docs) por HTTPS. El punto inicial es la cabecera de Toca, tomado de la [Registraduría](https://registraduria.gov.co/IMG/pdf/20231006_puestos-de-votacion-georreferenciacion_territoriales.pdf). Si se conoce la ubicación del lote, se puede configurar en `AGROEDGE_LAT` y `AGROEDGE_LON`. El pronóstico se resume en bloques horarios de 24 y 48 h a partir del inicio de la hora actual. La consulta requiere Internet y la interfaz informa si no está disponible. Las alertas de calidad usan datos de la estación. Los avisos de precipitación identifican su fuente externa y son orientativos.
+## Fuentes meteorológicas
 
-## Verificación y estructura
+| Fuente | Acceso y resultado en AgroEdge IA |
+| --- | --- |
+| **NOAA CPC** | Requests y BeautifulSoup extraen el título, la sinopsis y el estado ENSO del boletín HTML. SQLite guarda las ediciones y deduplica por huella. La ejecución diaria verificada quedó a las 16:30 de Bogotá. |
+| **Eltiempoen.net** | Requests obtiene el HTML de Toca. BeautifulSoup verifica la URL canónica y la atribución, y lee las tablas con `table.tabla--calor`, `thead th` y `tbody tr`. SQLite conserva revisión, hora, método y huella. La tarea de Windows quedó a las 09:00, con seis horas de intervalo interno y respeto de `robots.txt` y `Retry-After`. La actualización HTTPS del 24 de noviembre almacenó 48 horas y el panel mostró 27 vigentes durante la comprobación. |
+| **Open-Meteo** | La plataforma consulta la **API REST** para el pronóstico horario y los acumulados de precipitación en horizontes de 24 y 48 horas. La ubicación y la hora se muestran como información meteorológica externa. |
+
+El contexto externo permanece separado de las etiquetas utilizadas para entrenar el modelo. La carpeta `evidencias/meteorologia/Bases_de_consulta`, incluida en el ZIP de código, conserva las SQLite meteorológicas verificadas. Para inspeccionarlas localmente sin iniciar recolectores, apunta `AGROEDGE_R5_DIR` a esa carpeta antes de iniciar la plataforma. La pestaña de pronóstico también puede consultar Open-Meteo a través de su API si hay red. [Evidencias y procedencia](evidencias/README.md) · [NOAA CPC](https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc_Sp.shtml) · [Eltiempoen.net](https://eltiempoen.net/colombia/el-tiempo-en-toca) · [Open-Meteo](https://open-meteo.com/en/docs)
+
+## Resultados experimentales
+
+| Indicador | Resultado verificado |
+| --- | --- |
+| Captura y particiones | 2.823 lecturas auditadas en 6 sesiones. 183 ventanas de seis lecturas, con 59 de entrenamiento, 61 de validación y 63 de prueba. |
+| Modelo final | Regresión lineal regularizada, exportada a TensorFlow Lite int8 con un operador `FULLY_CONNECTED`, 1.160 bytes. |
+| Resultado de campo | 76,7 % de exactitud balanceada en validación y 63 de 63 clasificaciones correctas en las dos sesiones de prueba. Se saturaron 43 componentes de humedad en prueba. La evaluación cubre una estación y las condiciones observadas. |
+| Inferencia física | Paridad de clase y salida cuantizada en los 63 vectores, y seis clasificaciones consecutivas recibidas por AgroEdge IA vía USB. |
+| Banco aislado | 256 inferencias tras 16 de calentamiento. Media de 8,674 µs y 2.081,676 ciclos a 240 MHz. Imagen de aplicación de 401.088 B, RAM estática de 28.952 B y arena usada de 532 B. |
+| Energía | Estimación para el chip de 1,886 a 3,088 µJ por inferencia según escenario, calculada con la latencia del banco y corrientes de referencia de Espressif. La medición eléctrica directa de la placa queda pendiente. |
+
+La latencia del panel corresponde a la ejecución en una ventana de lecturas reales y su cálculo de puntuación. La del banco usa vectores preparados y un contador de ciclos. [Cierre técnico y limitaciones](docs/cierre-tecnico-2026-11-24.md) · [Matriz R1–R8](MATRIZ_DE_REQUISITOS.md)
+
+## Verificación y organización
+
+Ejecuta las comprobaciones en una extracción independiente con las dependencias instaladas. Los extractores se prueban desde archivos HTML y respuestas controladas. El banco físico archivado permite evaluar los recursos del modelo sin acceder al dispositivo.
 
 ```powershell
+& $python -B -m unittest discover -s tests
 npm.cmd test
 npm.cmd run check
 npm.cmd run build
 npm.cmd run test:app
 ```
 
-La prueba de aplicación abre un servidor de producción y una base temporal propios. Usa Python para el fixture serial. Si el entorno de ejecución bloquea las conexiones a `127.0.0.1`, ejecuta `npm.cmd run test:app -- --routes` después de compilar para verificar las rutas compiladas directamente. Lee el [contrato de integración](docs/integracion.md) y el [registro de verificación](docs/verificacion.md).
-
-| Carpeta | Contenido |
+| Ruta | Contenido |
 | --- | --- |
-| `app`, `components` | Interfaz Next.js y endpoints locales. |
-| `lib` | Modelo de datos, SQLite, simulación, análisis y formatos. |
-| `hardware` | Puente serial local y ejemplos Arduino UNO y ESP32. |
-| `examples` | Archivos de demostración y fixtures de transporte. |
-| `tests`, `scripts` | Pruebas de lógica y ejecución completa. |
-| `docs` | Contrato para Java, ESP32, formatos y verificación. |
+| `app/`, `components/`, `lib/` | API, interfaz, validación, persistencia y pronóstico. |
+| `hardware/esp32_tinyml/` | Sketch definitivo, modelo congelado, perfil y guía de compilación. |
+| `hardware/bridge.py`, `scraper/`, `scripts/` | Puente USB, recolectores, trazabilidad y reproducción de resultados. |
+| `java/r5/`, `tests/` | Cliente Java, índices y pruebas de regresión. |
+| `examples/` | Fixtures de transporte y referencias experimentales, incluido el prototipo de centroides. |
+| `docs/`, `evidencias/` | Índice técnico, auditoría, datos y pruebas de campo entregadas con la distribución. |
 
-El repositorio de esta entrega es independiente. El respaldo íntegro de DataCity AI se conservó por separado. Se mantuvieron el panel, las gráficas, las estadísticas, la detección de anomalías, Pearson, la tendencia local y la exploración de registros. La demo masiva y la imputación se reemplazaron por la simulación reproducible y las banderas de calidad. Las vistas genéricas de la feria y la configuración de gas MQ se retiraron al adaptar la estación al BME280. El módulo de consultas conserva preguntas predeterminadas sobre las mediciones. La adquisición, persistencia y consulta pueden pasar al servicio Java cuando esté disponible, usando el contrato adjunto.
+[Índice técnico](docs/INDICE_TECNICO.md) · [Evidencias de la distribución](evidencias/README.md) · [Licencias y atribuciones](docs/ATRIBUCIONES.md)
 
+## Equipo y contribuciones registradas
+
+El equipo está integrado por **Juan Alejandro Castillo Arévalo** y **Sergio Andrés Guerrero Alba**. La bitácora de entrenamiento identifica a Juan como responsable de esa adquisición. Los registros de validación y prueba identifican a Sergio como observador de los intervalos de exposición confirmados. El historial de Git se adjunta tal como está registrado y las bitácoras documentan el trabajo de campo. [Bitácoras y evidencias de la campaña](evidencias/README.md)

@@ -4,7 +4,7 @@
 
 namespace agroedge {
 
-// Engineering reference points only. No field observations were used to set them.
+// Engineering reference points used in the early USB verification.
 constexpr char modelVersion[] = "humidity-prototype-1";
 constexpr char modelStatus[] = "PRELIMINARY";
 constexpr char labelText[][32] = {"Humedad ambiental baja", "Humedad ambiental media", "Humedad ambiental alta"};

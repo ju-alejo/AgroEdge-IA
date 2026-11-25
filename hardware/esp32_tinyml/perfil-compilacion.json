@@ -1,0 +1,18 @@
+{
+  "sketch": "esp32_tinyml",
+  "model_version": "exposure-tflm-2c4870d61d3f",
+  "model_file": "modelo/exposure-int8.tflite",
+  "model_bytes": 1160,
+  "model_sha256": "2c4870d61d3ff2e82ff1972d112372b69e370c5cb7c352df54ab6d7d3534333d",
+  "arduino_cli_verified": "1.6.0",
+  "platform": "esp32:esp32@4.0.0",
+  "fqbn": "esp32:esp32:esp32s3:UploadSpeed=921600,USBMode=hwcdc,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=240,FlashMode=qio,FlashSize=4M,PartitionScheme=default,DebugLevel=none,PSRAM=disabled,LoopCore=1,EventsCore=1,EraseFlash=none,JTAGAdapter=default,ZigbeeMode=default",
+  "libraries": [
+    {"name": "Chirale_TensorFLowLite", "version": "2.0.0", "git_commit": "46da2f989205a9216229d38cd3d1c657d79d6781"},
+    {"name": "Adafruit BMP280 Library", "version": "3.0.0"},
+    {"name": "Adafruit BusIO", "version": "1.17.4"},
+    {"name": "Adafruit Unified Sensor", "version": "1.1.15"}
+  ],
+  "serial": {"transport": "UART USB", "baud": 115200, "format": "8N1", "framing": "JSON UTF-8 por línea"},
+  "sensors": {"sda_gpio": 8, "scl_gpio": 9, "voltage_v": 3.3, "aht20_i2c": "0x38", "bmp280_i2c": "0x77"}
+}
