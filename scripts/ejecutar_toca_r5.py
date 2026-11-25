@@ -29,7 +29,8 @@ def run(directory, command, workspace):
         with (attempt / "stdout.log").open("wb") as stdout, (attempt / "stderr.log").open("wb") as stderr:
             try:
                 child = subprocess.run(command, cwd=workspace, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
-                                       env={**os.environ, "AGROEDGE_TOCA_TRACE": "1", "PYTHONIOENCODING": "utf-8"},
+                                       env={**os.environ, "AGROEDGE_TOCA_TRACE": "1", "PYTHONIOENCODING": "utf-8",
+                                            "AGROEDGE_TOCA_HTML": str(attempt / "pronostico.html")},
                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=180)
                 code = child.returncode
             except (OSError, subprocess.TimeoutExpired):

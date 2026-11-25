@@ -10,11 +10,13 @@ from pathlib import Path
 import re
 import sqlite3
 import sys
+import time
 
 from bs4 import BeautifulSoup
 import requests
 
-from agroclima import AccessError, DEFAULT_DIR, download, iso, reserve_daily
+from agroclima import AccessError, DEFAULT_DIR, download, iso, retry_time
+from toca_policy import SCHEMA, authorize_once, reserve, restrict
 
 
 URL = "https://eltiempoen.net/colombia/el-tiempo-en-toca"
@@ -34,10 +36,27 @@ def trace(event, **details):
 
 
 class ForecastSession(requests.Session):
+    def __init__(self, database):
+        super().__init__()
+        self.trust_env = False
+        self.database = database
+        self.last_request = None
+
     def get(self, url, **kwargs):
+        if self.last_request is not None:
+            time.sleep(max(0, self.last_request + 1.1 - time.monotonic()))
+        self.last_request = time.monotonic()
         trace("intento_https", url=url)
         response = super().get(url, **kwargs)
-        trace("respuesta_http", url=url, estado=response.status_code, retry_after=response.headers.get("Retry-After"))
+        retry_after = response.headers.get("Retry-After")
+        trace("respuesta_http", url=url, estado=response.status_code, retry_after=retry_after)
+        if response.status_code in (403, 429) or retry_after is not None:
+            reason = f"HTTP {response.status_code} · {url}"
+            until = retry_time(retry_after)
+            with response:
+                restrict(self.database, reason, until)
+            trace("restriccion_externa", motivo=reason, proxima_consulta_utc=until)
+            raise AccessError(f"{reason}. Consulta detenida por la política de acceso.", until)
         return response
 
 
@@ -94,8 +113,7 @@ def connect(directory):
         owner = database.execute("PRAGMA application_id").fetchone()[0]
         if owner != APP_ID and (owner != 0 or database.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone()):
             raise ValueError("La base pertenece a otra aplicación.")
-        database.executescript(f"PRAGMA application_id={APP_ID}; PRAGMA journal_mode=WAL; "
-                               "CREATE TABLE IF NOT EXISTS policy(id INTEGER PRIMARY KEY,next_at TEXT NOT NULL); "
+        database.executescript(f"PRAGMA application_id={APP_ID}; PRAGMA journal_mode=WAL; {SCHEMA}"
                                "CREATE TABLE IF NOT EXISTS snapshots(revision TEXT PRIMARY KEY, fetched_at TEXT NOT NULL, "
                                "method TEXT NOT NULL, raw_sha TEXT NOT NULL, payload TEXT NOT NULL);")
         return database
@@ -115,20 +133,21 @@ def save(database, raw, retrieved, method):
 
 
 def fetch(database, retrieved):
-    if waiting := reserve_daily(database, retrieved):
-        trace("limite_vigente", proxima_consulta_utc=waiting["proxima_consulta_utc"])
+    waiting, authorization = reserve(database, retrieved)
+    if waiting:
+        event = "limite_externo_vigente" if waiting["resultado"] == "BLOQUEO_EXTERNO" else "limite_vigente"
+        trace(event, proxima_consulta_utc=waiting["proxima_consulta_utc"])
         return waiting
+    if authorization:
+        trace("excepcion_administrativa_consumida", reserva_anterior_utc=authorization)
     trace("reserva_confirmada", inicio_consulta_utc=iso(retrieved))
-    with ForecastSession() as session:
-        try:
-            raw = download(session, url=URL, robots=ROBOTS, user_agent=USER_AGENT)
-            trace("html_recibido", bytes=len(raw), sha256=sha256(raw).hexdigest())
-            return save(database, raw, retrieved, "HTTPS")
-        except AccessError as error:
-            if error.retry_at:
-                with database:
-                    database.execute("UPDATE policy SET next_at=max(next_at,?) WHERE id=1", (error.retry_at,))
-            raise
+    with ForecastSession(database) as session:
+        raw = download(session, url=URL, robots=ROBOTS, user_agent=USER_AGENT)
+    trace("html_recibido", bytes=len(raw), sha256=sha256(raw).hexdigest())
+    if archive := os.environ.get("AGROEDGE_TOCA_HTML"):
+        with Path(archive).open("xb") as output:
+            output.write(raw)
+    return save(database, raw, retrieved, "HTTPS")
 
 
 def main():
@@ -136,6 +155,10 @@ def main():
     parser.add_argument("--dir", type=Path, default=Path(os.environ.get("AGROEDGE_R5_DIR") or DEFAULT_DIR))
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("fetch")
+    authorization = commands.add_parser("authorize-once", help="Registrar un único adelanto de una reserva interna vigente")
+    authorization.add_argument("--expected-gate", required=True)
+    authorization.add_argument("--expires", required=True, type=datetime.fromisoformat)
+    authorization.add_argument("--reason", required=True)
     capture = commands.add_parser("capture")
     capture.add_argument("file", type=Path)
     capture.add_argument("--at", required=True, type=datetime.fromisoformat)
@@ -143,6 +166,10 @@ def main():
     with closing(connect(args.dir)) as database:
         if args.action == "fetch":
             result = fetch(database, datetime.now(timezone.utc))
+        elif args.action == "authorize-once":
+            if args.expires.tzinfo is None:
+                parser.error("--expires requiere una zona horaria explícita.")
+            result = authorize_once(database, datetime.now(timezone.utc), args.expires, args.expected_gate, args.reason)
         else:
             if args.at.tzinfo is None:
                 parser.error("--at requiere una zona horaria explícita.")
