@@ -117,7 +117,7 @@ Con `P = V × I` y `E = P × t` para los 8,67365 µs medidos se estiman 1,886259
 
 ### Recepción real en AgroEdge IA
 
-La instancia Next.js de ensayo recibió por COM8 las secuencias 21–26 con temperatura, humedad, presión e inferencia `REAL/USB`. La API de historial y el dashboard recuperaron el mismo `modelVersion` y marcaron la hora del resultado como `RECEIPT`. En la secuencia 26 se mostró `Perfil de invernadero`, puntuación 0,506 y 70 µs de latencia en el flujo USB. Las seis clasificaciones se conservaron en la SQLite de ensayo después de cerrar el puente y reiniciar la instancia. Se comprobó la integridad de ambas bases en modo de solo lectura y cero filas de ese modelo en la base de campo. La misma verificación HTTP devolvió una edición NOAA y 48 horas de contexto de Toca, con cinco horas vigentes al momento de la prueba. [Captura del dashboard](C:/AgroEdge/output/evidencia/campana-exposicion-2026-11-24/modelo-tflm/integracion-usb/dashboard-tinyml-fisico.png)
+La instancia Next.js de ensayo recibió por COM8 las secuencias 21–26 con temperatura, humedad, presión e inferencia `REAL/USB`. La API de historial y el dashboard recuperaron el mismo `modelVersion` y marcaron la hora del resultado como `RECEIPT`. En la secuencia 26 se mostró `Perfil de invernadero`, puntuación 0,506 y 70 µs de latencia en el flujo USB. Las seis clasificaciones se conservaron en la SQLite de ensayo después de cerrar el puente y reiniciar la instancia. Al cerrar ese ensayo, antes de la demostración manual, se comprobó la integridad de ambas bases en modo de solo lectura y cero filas de ese modelo en la base de campo. La misma verificación HTTP devolvió una edición NOAA y 48 horas de contexto de Toca, con cinco horas vigentes al momento de la prueba. [Captura del dashboard](C:/AgroEdge/output/evidencia/campana-exposicion-2026-11-24/modelo-tflm/integracion-usb/dashboard-tinyml-fisico.png)
 
 Pasaron 27 pruebas Python, 11 de Node, TypeScript, compilación Next.js, la integración HTTP con exportación CSV/Excel y los fixtures USB y Wi-Fi, el render del boletín NOAA y el índice Java. La repetición del entrenamiento produjo los mismos SHA-256 de ambos FlatBuffers y de los vectores de prueba. También se reprodujeron los diagnósticos de saturación y validación por sesión.
 
@@ -127,13 +127,38 @@ $m = "$e/modelo-tflm"
 & $py scripts/estimate_esp32_energy.py "$r/benchmark-fisico.json" "$r/estimacion-energetica.json"
 ```
 
+## Demostración manual en AgroEdge IA
+
+El 24 de noviembre se observó el cambio de perfil después de trasladar físicamente la estación del invernadero al exterior. Las tres filas se verificaron en `data/agroedge.sqlite` en modo de solo lectura. Todas son inferencias `REAL/USB` de `exposure-tflm-2c4870d61d3f`, registradas con la hora de recepción en Bogotá. Las ventanas de la campaña permanecen congeladas en 59 de entrenamiento, 61 de validación y 63 de prueba. Las lecturas de demostración pertenecen a una sesión ajena a las seis sesiones experimentales y se conservan como evidencia de funcionamiento.
+
+| Recepción en Bogotá | Secuencia | Clase mostrada | Puntuación | Latencia | Evidencia |
+| --- | ---: | --- | ---: | ---: | --- |
+| 20:29:59 | 582 | Perfil de invernadero | 0,506 | 71 µs | Registro comunicado por el usuario y confirmado en SQLite |
+| 20:30:34 | 589 | Perfil de invernadero | 0,506 | 89 µs | [Captura de invernadero](C:/AgroEdge/output/evidencia/Demostracion_Final/R3_TinyML_Invernadero.png) y SQLite |
+| 20:31:24 | 599 | Perfil exterior | 0,153 | 89 µs | [Captura de exterior](C:/AgroEdge/output/evidencia/Demostracion_Final/R3_TinyML_Exterior.png) y SQLite |
+
+### Significado de la puntuación
+
+El modelo produce un valor de salida cuantizado `q` de tipo `int8`. Su punto cero `z` es `1`. El firmware calcula el margen con signo `m = q − z`. Si `m > 0`, asigna el perfil exterior. Si `m ≤ 0`, asigna el perfil de invernadero. El dashboard redondea a tres decimales la puntuación que recibe del firmware, `|q − z| / 255`. Es una distancia al umbral de decisión en unidades normalizadas, sin calibración probabilística. La clase se determina por el signo, que la puntuación omite. [Cálculo en el firmware](../hardware/esp32_tinyml/inference.h#L49) · [Formato en el dashboard](../components/datacity/views.tsx#L47)
+
+En los registros de invernadero el margen fue de 129 niveles (`q = −128`), que da `129/255 = 0,505882`, la puntuación máxima posible con el punto cero de este modelo. En exterior, el margen fue de 39 niveles (`q = 40`), equivalente a `39/255 = 0,152941`. Los valores de `q` se reconstruyeron a partir de la clase y de la puntuación guardada con seis decimales en SQLite.
+
+### Alcance de cada latencia
+
+| Medición | Qué cronometra | Resultado |
+| --- | --- | --- |
+| Dashboard (`inferenceUs`) | Tiempo transcurrido en la ESP32-S3 con `esp_timer_get_time()` alrededor de la inferencia sobre una ventana de lecturas reales. Incluye la codificación de la entrada, `Invoke()`, la clase y la puntuación. La ventana ya está calculada al iniciar el cronómetro y el envío USB ocurre después. | 71 y 89 µs en los registros de la demostración |
+| Benchmark aislado | Ciclos de CPU alrededor de la llamada con vectores ya preparados y 16 invocaciones de calentamiento. El banco consume el índice de clase como resultado. Divide la media de 2.081,676 ciclos por 240 MHz. | 8,674 µs de media en 256 invocaciones |
+
+La marca horaria del dashboard indica cuándo el PC recibió el registro. Para calcular el tiempo físico de respuesta haría falta la hora exacta del traslado. Estas evidencias sólo contienen las horas de recepción. [Tramo medido en el flujo USB](../hardware/esp32_tinyml/esp32_tinyml.ino#L138) · [Medición aislada](../hardware/esp32_tinyml/benchmark.h#L25) · [Verificación reproducible](C:/AgroEdge/output/evidencia/Demostracion_Final/verificacion-demostracion-2026-11-24.json)
+
 ## R1–R8
 
 | Requisito | Estado |
 | --- | --- |
 | R1 | Caso agroclimático local documentado. Falta evidencia directa del beneficiario. |
 | R2 | Adquisición e inferencia real en placa por USB, con seis resultados consecutivos verificados también en el dashboard. Wi-Fi conserva el contrato probado por HTTP. |
-| R3 | Modelo ligero int8 entrenado, congelado y ejecutado en TFLite Micro en placa. Paridad completa de los 63 vectores. |
+| R3 | Modelo ligero int8 entrenado, congelado y ejecutado en TFLite Micro en placa. Paridad completa de los 63 vectores y cambio de perfil observado en la demostración manual. |
 | R4 | Seis sesiones propias, etiquetas de campo y evaluación separada reproducidas. La generalización espacial y temporal sigue pendiente. |
 | R5 | Ejecución automática NOAA y deduplicación comprobadas. Toca tiene captura HTTPS y dashboard verificados, y su actualización diaria quedó programada. [Evidencia R5](r5-verificacion.md#ejecución-automática-y-deduplicación--24-de-noviembre-de-2026) |
 | R6 | Ventana circular en el edge e índices SQLite y Java del boletín. |

@@ -99,3 +99,7 @@ La reproducción de la captura HTML del 23 en una SQLite de ensayo produjo `NUEV
 Get-ScheduledTaskInfo -TaskName 'AgroEdge IA - Boletin R5','AgroEdge IA - Pronostico Toca R5'
 & .venv/r5-python/Scripts/python.exe scraper/agroclima.py status
 ```
+
+### Demostración del pronóstico agrícola antes de las 20:45
+
+El 24 de noviembre se verificaron visualmente los dos paneles en **Pronóstico agrícola**. Open-Meteo mostraba sus horizontes de 24 y 48 horas, con hora de consulta **20:27:51** en Bogotá. Eltiempoen.net mostraba cuatro filas vigentes para Toca, de las **20:00, 21:00, 22:00 y 23:00**, de la captura HTTPS del 23 de noviembre a las **21:40:34**. El panel incluía su procedencia y atribución. El filtro de vigencia explica por qué quedaban cuatro horas de la captura previa. La evidencia corresponde al estado anterior al horario automático de las 20:45. Ambos paneles se conservaron como contexto meteorológico externo. [Vista de ambos paneles](C:/AgroEdge/output/evidencia/Demostracion_Final/R5_Pronostico_Agricola_Antes_Actualizacion.png) · [Detalle y procedencia de Toca](C:/AgroEdge/output/evidencia/Demostracion_Final/R5_Eltiempoen_Procedencia_y_Datos.png)
