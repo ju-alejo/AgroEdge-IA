@@ -171,7 +171,7 @@ def main():
     majority = max(range(2), key=lambda i: counts["train"][EXPOSURE_LABELS[i]])
     models = {name: (convert(*param), convert(*param, representative=representative)) for name, param in coefficients.items()}
     candidates = {name: (Interpreter(floating, False), Interpreter(integer, True)) for name, (floating, integer) in models.items()}
-    val, _ = evaluate(dataset["validation"], candidates, centroids, majority)
+    val, validation_predictions = evaluate(dataset["validation"], candidates, centroids, majority)
     selected = max(candidates, key=lambda name: (val[name]["int8"]["balanced_accuracy"], val[name]["int8"]["macro_f1"]))
     floating, integer = models[selected]
     version = "exposure-tflm-" + sha256(integer).hexdigest()[:12]
@@ -187,6 +187,11 @@ def main():
               "centroids_float": centroids.tolist(), "audit_sha256": digest(args.audit), "labels_sha256": digest(args.labels),
               "label_order": EXPOSURE_LABELS}
     write_json(args.output / "modelo-congelado.json", frozen)
+    val_counts = Counter((row["event"], row["label"], EXPOSURE_LABELS[predicted]) for row, predicted in
+                         zip(dataset["validation"], validation_predictions[selected][0], strict=True))
+    write_json(args.output / "validacion-por-sesion.json", [
+        {"session": event, "observed": label, "predicted": guess, "windows": n}
+        for (event, label, guess), n in sorted(val_counts.items())])
 
     test = dataset["test"]
     result, outputs = evaluate(test, {selected: candidates[selected]}, centroids, majority)

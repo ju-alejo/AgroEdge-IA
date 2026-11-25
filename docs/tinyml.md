@@ -8,6 +8,8 @@ El [replay del detector](detector-regimen.md) explica la renovación automática
 
 El [piloto entrenado con S01](modelo-y-meteorologia-2026-11-23.md) registra el ajuste de exposición, el protocolo de nuevas sesiones y las estimaciones energéticas.
 
+La [campaña del 24 y el modelo TensorFlow Lite Micro](cierre-tecnico-2026-11-24.md) reúnen las seis sesiones, la evaluación independiente y el procedimiento para reproducir el candidato.
+
 ## Estación y alcance
 
 La estación mide temperatura del aire, humedad relativa y presión atmosférica. El pronóstico horario de Open-Meteo y el boletín ENSO de NOAA llegan al dashboard por separado. El ESP32 clasifica con las lecturas locales y puede hacerlo sin Internet. En el dashboard, la decisión de riego sigue requiriendo observación del lote y necesidades del cultivo. [Open-Meteo](https://open-meteo.com/en/docs) · [Discusión ENSO del CPC](https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc_Sp.shtml) · [FAO 56](https://www.fao.org/4/X0490E/X0490E00.htm)

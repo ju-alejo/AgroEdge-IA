@@ -34,6 +34,13 @@ def benchmark_metrics(report, expected_version=None):
         raise ValueError("La versión cargada en el dispositivo difiere de la esperada.")
     if report.get("runs") != 256 or report.get("warmup") != 16:
         raise ValueError("Se esperaban 256 inferencias medidas después de 16 ejecuciones de calentamiento.")
+    if report.get("failedInvocations", 0) != 0:
+        raise ValueError("El firmware reportó invocaciones fallidas en el benchmark.")
+    if report.get("backend") == "TFLITE_MICRO" and not (
+            type(report.get("modelBytes")) is int and report["modelBytes"] > 0
+            and type(report.get("tensorArenaUsedBytes")) is int and type(report.get("tensorArenaBytes")) is int
+            and 0 < report["tensorArenaUsedBytes"] <= report["tensorArenaBytes"]):
+        raise ValueError("Memoria de TFLite Micro inválida.")
     positive = ("cpuMHz", "batchUs", "flashBytes", "appPartitionBytes", "sketchBytes", "heapInternalTotal")
     nonnegative = ("cyclesMean", "cyclesStd", "cyclesMax", "heapInternalMin", "heapInternalFree", "stackFreeMin",
                    "psramTotal", "psramFree", "weightsBytes", "windowBytes")
@@ -56,9 +63,9 @@ def benchmark_metrics(report, expected_version=None):
             "internal_heap_peak_pct": 100 * (1 - report["heapInternalMin"] / report["heapInternalTotal"])}
 
 
-def verify_stream(device, expected_version):
+def verify_stream(device, expected_version, consecutive_inferences=1):
     recent = []
-    deadline = time.monotonic() + 55
+    deadline = time.monotonic() + 50 + 5 * consecutive_inferences
     while time.monotonic() < deadline:
         row = read_record(device)
         if not row or row.get("schemaVersion") != 1:
@@ -79,15 +86,16 @@ def verify_stream(device, expected_version):
         recent = recent[-6:]
         if len(recent) < 6:
             continue
-        result = row.get("classification")
-        if not isinstance(result, dict) or result.get("state") != "OK":
+        results = [sample.get("classification") for sample, _ in recent[-consecutive_inferences:]]
+        if not all(isinstance(result, dict) and result.get("state") == "OK" for result in results):
             continue
-        score, label = result.get("score"), result.get("label")
-        if (result.get("source") != "ESP32" or result.get("modelVersion") != expected_version or
-                result.get("modelStatus") not in ("PRELIMINARY", "TRAINED") or not isinstance(label, str) or not label.strip() or
-                type(score) not in (float, int) or not 0 <= score <= 1 or
-                type(result.get("inferenceUs")) is not int or result["inferenceUs"] < 0):
-            raise ValueError("La sexta lectura debe reportar inferencia ESP32 con clase, puntuación, versión esperada y latencia.")
+        for result in results:
+            score, label = result.get("score"), result.get("label")
+            if (result.get("source") != "ESP32" or result.get("modelVersion") != expected_version or
+                    result.get("modelStatus") not in ("PRELIMINARY", "TRAINED") or not isinstance(label, str) or not label.strip() or
+                    type(score) not in (float, int) or not 0 <= score <= 1 or
+                    type(result.get("inferenceUs")) is not int or result["inferenceUs"] < 0):
+                raise ValueError("Inferencia ESP32 sin clase, puntuación, versión esperada o latencia válidas.")
         return {"confirmed_at": datetime.now(timezone.utc).isoformat(), "samples": [sample for sample, _ in recent]}
     raise TimeoutError("No se verificaron seis lecturas físicas consecutivas con clasificación.")
 
@@ -98,6 +106,9 @@ def main():
     parser.add_argument("--vectors", type=Path)
     parser.add_argument("--expect-model", help="Versión esperada del firmware en ejecución")
     parser.add_argument("--check-stream", action="store_true", help="Comprueba seis mediciones consecutivas antes del benchmark")
+    parser.add_argument("--stream-inferences", type=int, choices=range(1, 7), default=1,
+                        help="Cantidad de las últimas seis lecturas que deben tener inferencia consecutiva")
+    parser.add_argument("--expect-backend", choices=("TFLITE_MICRO", "CENTROIDS"))
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
     data = json.loads(args.vectors.read_text(encoding="utf-8")) if args.vectors else None
@@ -115,8 +126,10 @@ def main():
         time.sleep(2)
         device.reset_input_buffer()
         if args.check_stream:
-            report["measurement_check"] = verify_stream(device, expected_version)
+            report["measurement_check"] = verify_stream(device, expected_version, args.stream_inferences)
         benchmark = exchange(device, "B", "benchmark")
+        if args.expect_backend and benchmark.get("backend") != args.expect_backend:
+            raise ValueError("El dispositivo no ejecutó el intérprete esperado.")
         report["benchmark"] = benchmark
         report["derived"] = benchmark_metrics(benchmark, expected_version)
         if data:
@@ -128,14 +141,19 @@ def main():
                 response = exchange(device, "Q " + " ".join(map(str, features)), "prediction")
                 if response["features"] != features or response["modelVersion"] != data["version"]:
                     raise ValueError("El dispositivo devolvió un vector o versión distinto.")
-                predictions.append({**vector, "device_index": response["index"]})
+                prediction = {**vector, "device_index": response["index"]}
+                if "expected_logit_int8" in vector:
+                    prediction["device_logit_int8"] = response["logitInt8"]
+                predictions.append(prediction)
             report["replay"] = {"purpose": data.get("purpose", "held_out_vectors"), "predictions": predictions,
-                                "mismatches": sum(row["device_index"] != row["expected_index"] for row in predictions)}
+                                "mismatches": sum(row["device_index"] != row["expected_index"] for row in predictions),
+                                "logit_mismatches": sum(row.get("device_logit_int8") != row.get("expected_logit_int8")
+                                                        for row in predictions)}
     with args.out.open("x", encoding="utf-8") as file:
         json.dump(report, file, ensure_ascii=False, indent=2)
         file.write("\n")
     print(args.out)
-    if report.get("replay", {}).get("mismatches"):
+    if any(report.get("replay", {}).get(key) for key in ("mismatches", "logit_mismatches")):
         raise SystemExit("Las predicciones del dispositivo difieren del modelo de referencia int8.")
 
 

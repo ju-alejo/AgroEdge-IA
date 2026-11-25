@@ -4,7 +4,6 @@
 #include <esp_timer.h>
 #include <math.h>
 
-#include "model.h"
 #include "benchmark.h"
 
 constexpr char stationId[] = "TOCA-ESP32-01";
@@ -35,9 +34,13 @@ static void handleDiagnostics() {
     if (!overflow && sscanf(command, "Q %4d %4d %4d %c", &t, &h, &p, &extra) == 3 &&
         t >= -128 && t <= 127 && h >= -128 && h <= 127 && p >= -128 && p <= 127) {
       const agroedge::Features input{static_cast<int8_t>(t), static_cast<int8_t>(h), static_cast<int8_t>(p)};
-      const auto result = agroedge::classify(input, agroedge::centroids);
-      Serial.printf("{\"event\":\"prediction\",\"modelVersion\":\"%s\",\"features\":[%d,%d,%d],\"index\":%u}\n",
-                    agroedge::modelVersion, t, h, p, result.index);
+      unsigned index = 0;
+      double score = 0;
+      int logit = 0;
+      if (agroedge::infer(input, index, score, logit)) {
+        Serial.printf("{\"event\":\"prediction\",\"modelVersion\":\"%s\",\"features\":[%d,%d,%d],\"index\":%u,\"logitInt8\":%d}\n",
+                      agroedge::modelVersion, t, h, p, index, logit);
+      }
     }
     length = 0;
     overflow = false;
@@ -122,18 +125,20 @@ static void acquire() {
   }
 
   const bool valid = isfinite(temperature) && isfinite(humidity) && isfinite(pressure);
-  bool classified = false;
-  auto inference = agroedge::Classification{};
+  bool attempted = false, classified = false;
+  unsigned index = 0;
+  double score = 0;
+  int logit = 0;
   int64_t inferenceUs = 0;
   if (valid) {
     const agroedge::Sample sample{static_cast<int16_t>(lroundf(temperature * 100)),
                                   static_cast<uint16_t>(lroundf(humidity * 100)),
                                   static_cast<uint32_t>(lroundf(pressure * 100))};
     agroedge::Features features{};
-    classified = window.push(sample, lastSample, features);
-    if (classified) {
+    attempted = window.push(sample, lastSample, features);
+    if (attempted) {
       const int64_t start = esp_timer_get_time();
-      inference = agroedge::classify(features, agroedge::centroids);
+      classified = agroedge::infer(features, index, score, logit);
       inferenceUs = esp_timer_get_time() - start;
     }
     // Serialize the same centesimal values used by the model.
@@ -149,12 +154,12 @@ static void acquire() {
   writeValue("temperature", temperature);
   writeValue("humidity", humidity);
   writeValue("pressure", pressure);
-  if (classified || !valid) {
+  if (attempted || !valid) {
     Serial.printf(",\"classification\":{\"source\":\"ESP32\",\"modelVersion\":\"%s\",\"modelStatus\":\"%s\"",
                   agroedge::modelVersion, agroedge::modelStatus);
     if (classified) {
       Serial.printf(",\"state\":\"OK\",\"label\":\"%s\",\"score\":%.6f,\"inferenceUs\":%lld}",
-                    agroedge::labelText[inference.index], inference.score(), static_cast<long long>(inferenceUs));
+                    agroedge::labelText[index], score, static_cast<long long>(inferenceUs));
     } else Serial.print(",\"state\":\"ERROR\",\"label\":null,\"score\":null}");
   }
   Serial.println("}");
@@ -162,6 +167,7 @@ static void acquire() {
 
 void setup() {
   Serial.begin(115200);
+  agroedge::beginInference();
   Wire.begin(8, 9);
   Wire.setTimeOut(50);
   delay(100);

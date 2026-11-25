@@ -7,20 +7,28 @@
 #include <esp_timer.h>
 #include <math.h>
 
-#include "model.h"
+#include "inference.h"
 
 namespace agroedge {
 
 // Keep the measured kernel callable and observable even with link-time optimization.
 inline __attribute__((noinline, noipa)) unsigned benchmarkInference(Features features) {
-  return classify(features, centroids).index;
+  unsigned index = 0;
+  double score = 0;
+  int logit = 0;
+  return infer(features, index, score, logit) ? index : UINT32_MAX;
 }
 
 inline void reportBenchmark(Print &out) {
   constexpr unsigned runs = 256;
   constexpr unsigned warmup = 16;
   volatile unsigned checksum = 0;
-  for (unsigned i = 0; i < warmup; ++i) checksum = checksum + benchmarkInference({0, static_cast<int8_t>(i), 0});
+  unsigned failures = 0;
+  for (unsigned i = 0; i < warmup; ++i) {
+    const unsigned result = benchmarkInference({0, static_cast<int8_t>(i), 0});
+    if (result == UINT32_MAX) ++failures;
+    else checksum = checksum + result;
+  }
 
   double cycleMean = 0, cycleM2 = 0;
   uint32_t cycleMax = 0;
@@ -31,7 +39,8 @@ inline void reportBenchmark(Print &out) {
     const unsigned index = benchmarkInference(input);
     asm volatile("" : : "r"(index) : "memory");
     const uint32_t cycles = esp_cpu_get_cycle_count() - start;
-    checksum = checksum + index;
+    if (index == UINT32_MAX) ++failures;
+    else checksum = checksum + index;
     const double delta = cycles - cycleMean;
     cycleMean += delta / (i + 1);
     cycleM2 += delta * (cycles - cycleMean);
@@ -43,12 +52,14 @@ inline void reportBenchmark(Print &out) {
   const esp_partition_t *app = esp_ota_get_running_partition();
   out.printf("{\"event\":\"benchmark\",\"modelVersion\":\"%s\",\"modelStatus\":\"%s\",\"runs\":%u,\"warmup\":%u,"
              "\"core\":%d,\"cpuMHz\":%u,\"cyclesMean\":%.3f,\"cyclesStd\":%.3f,\"cyclesMax\":%lu,\"batchUs\":%lld,"
-             "\"checksum\":%u,\"weightsBytes\":%u,\"windowBytes\":%u,\"sketchBytes\":%u,\"flashBytes\":%u,"
+             "\"checksum\":%u,\"failedInvocations\":%u,\"backend\":\"%s\",\"modelBytes\":%u,\"tensorArenaBytes\":%u,\"tensorArenaUsedBytes\":%u,"
+             "\"weightsBytes\":%u,\"windowBytes\":%u,\"sketchBytes\":%u,\"flashBytes\":%u,"
              "\"appPartitionBytes\":%u,\"heapInternalTotal\":%u,\"heapInternalFree\":%u,\"heapInternalMin\":%u,"
              "\"stackFreeMin\":%u,\"psramTotal\":%u,\"psramFree\":%u}\n",
              modelVersion, modelStatus, runs, warmup, static_cast<int>(xPortGetCoreID()), freq,
              cycleMean, sqrt(cycleM2 / (runs - 1)), static_cast<unsigned long>(cycleMax), static_cast<long long>(batchUs),
-             static_cast<unsigned>(checksum), static_cast<unsigned>(sizeof(centroids)), static_cast<unsigned>(sizeof(SampleWindow)),
+             static_cast<unsigned>(checksum), failures, inferenceBackend, modelBytes, arenaBytes, arenaUsedBytes(),
+             weightsBytes, static_cast<unsigned>(sizeof(SampleWindow)),
              static_cast<unsigned>(ESP.getSketchSize()), static_cast<unsigned>(ESP.getFlashChipSize()),
              app ? static_cast<unsigned>(app->size) : 0,
              static_cast<unsigned>(heap_caps_get_total_size(heapCaps)), static_cast<unsigned>(heap_caps_get_free_size(heapCaps)),

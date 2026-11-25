@@ -7,6 +7,8 @@ import unittest
 
 from hardware.verify_tinyml import benchmark_metrics, verify_stream
 from scripts.audit_usb_dataset import read_snapshot, summarize_session
+from scripts.audit_exposure_campaign import backup
+from scripts.label_exposure_campaign import create_labels
 from scripts.process_usb_campaign import derive
 from scripts.tinyml_dataset import annotations, utc
 
@@ -48,6 +50,11 @@ class PhaseATest(unittest.TestCase):
                 db.commit()
                 self.assertTrue(path.with_suffix(".sqlite-wal").exists())
                 self.assertEqual(read_snapshot(path), ({"USB": 1}, 0, [({}, True)]))
+                target = path.with_name("consistent.sqlite")
+                backup(path, target)
+                self.assertEqual(read_snapshot(target), ({"USB": 1}, 0, [({}, True)]))
+                with self.assertRaises(FileExistsError):
+                    backup(path, target)
             finally:
                 db.close()
 
@@ -79,6 +86,13 @@ class PhaseATest(unittest.TestCase):
                 benchmark_metrics({**fixture, **invalid}, "qa-only")
         with self.assertRaisesRegex(ValueError, "versión"):
             benchmark_metrics(fixture, "different-model")
+        micro = {**fixture, "backend": "TFLITE_MICRO", "modelBytes": 1032, "tensorArenaBytes": 4096,
+                 "tensorArenaUsedBytes": 1900, "failedInvocations": 0}
+        self.assertEqual(benchmark_metrics(micro)["latency_us_from_cycles_mean"], 1)
+        with self.assertRaisesRegex(ValueError, "invocaciones fallidas"):
+            benchmark_metrics({**micro, "failedInvocations": 1})
+        with self.assertRaisesRegex(ValueError, "Memoria de TFLite Micro"):
+            benchmark_metrics({**micro, "tensorArenaUsedBytes": 4097})
 
     def test_stream_check_skips_broken_run_and_collects_six_consecutive_rows(self):
         def serial_row(seq, **extra):
@@ -97,6 +111,25 @@ class PhaseATest(unittest.TestCase):
                                                  "modelStatus": "PRELIMINARY", "label": "QA", "score": 0.7, "inferenceUs": 1}))
         result = verify_stream(FixturePort(rows), "qa-only")
         self.assertEqual([row["sequence"] for row in result["samples"]], list(range(3, 9)))
+        classification = json.loads(rows[-1])["classification"]
+        classified = [serial_row(i, classification=classification) for i in range(9, 14)]
+        strict = verify_stream(FixturePort(rows + classified), "qa-only", consecutive_inferences=6)
+        self.assertEqual([row["sequence"] for row in strict["samples"]], list(range(8, 14)))
+
+    def test_exposure_labels_clip_initial_stabilization_and_keep_the_whole_session_in_the_split(self):
+        audit = {"sessions": [{"letter": "F", "session": "SESSION", "partition": "Prueba",
+                               "start": "2026-11-24T18:20:19.750-05:00", "end": "2026-11-24T18:57:42-05:00"}]}
+        confirmation = {"cutoffs": ["2026-11-24T10:01:00-05:00", "2026-11-24T17:00:00-05:00"],
+                        "sessions": {"F": {"observer": "QA", "evidence": "qa-notes",
+                                           "intervals": [["outdoor", "2026-11-24T18:30:00-05:00", "2026-11-24T18:38:00-05:00"],
+                                                         ["greenhouse", "2026-11-24T18:48:00-05:00", "2026-11-24T18:56:00-05:00"]]}}}
+        labels, info = create_labels(audit, confirmation, [])
+        self.assertEqual(labels[0]["start"], "2026-11-24T23:30:19.750000+00:00")
+        self.assertEqual(labels[1]["start"], "2026-11-24T23:48:00+00:00")
+        self.assertEqual(info[0]["split"], "test")
+        confirmation["cutoffs"][1] = "2026-11-24T18:00:00-05:00"
+        with self.assertRaisesRegex(ValueError, "sesión completa"):
+            create_labels(audit, confirmation, [])
 
     def test_label_csv_format_can_be_audited_before_capture(self):
         header = b"session,start,end,label,event,observer,evidence\n"
