@@ -28,6 +28,19 @@ FIELDS = {"Temperatura °C": ("temperatureC", -60, 70), "Lluvia mm": ("precipita
           "Humedad %": ("humidityPct", 0, 100)}
 
 
+def trace(event, **details):
+    if os.environ.get("AGROEDGE_TOCA_TRACE") == "1":
+        print(json.dumps({"utc": iso(datetime.now(timezone.utc)), "evento": event, **details}), file=sys.stderr, flush=True)
+
+
+class ForecastSession(requests.Session):
+    def get(self, url, **kwargs):
+        trace("intento_https", url=url)
+        response = super().get(url, **kwargs)
+        trace("respuesta_http", url=url, estado=response.status_code, retry_after=response.headers.get("Retry-After"))
+        return response
+
+
 def number(cell, minimum, maximum):
     value = cell.get_text(" ", strip=True).replace(",", ".")
     if value in ("", "—", "-"):
@@ -103,10 +116,13 @@ def save(database, raw, retrieved, method):
 
 def fetch(database, retrieved):
     if waiting := reserve_daily(database, retrieved):
+        trace("limite_vigente", proxima_consulta_utc=waiting["proxima_consulta_utc"])
         return waiting
-    with requests.Session() as session:
+    trace("reserva_confirmada", inicio_consulta_utc=iso(retrieved))
+    with ForecastSession() as session:
         try:
             raw = download(session, url=URL, robots=ROBOTS, user_agent=USER_AGENT)
+            trace("html_recibido", bytes=len(raw), sha256=sha256(raw).hexdigest())
             return save(database, raw, retrieved, "HTTPS")
         except AccessError as error:
             if error.retry_at:
@@ -138,5 +154,6 @@ if __name__ == "__main__":
     try:
         main()
     except (ValueError, OSError, AttributeError, sqlite3.Error, requests.RequestException) as error:
+        trace("error", tipo=type(error).__name__)
         print(f"Pronóstico Toca: {error}", file=sys.stderr)
         sys.exit(1)

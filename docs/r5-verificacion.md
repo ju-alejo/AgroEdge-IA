@@ -103,3 +103,27 @@ Get-ScheduledTaskInfo -TaskName 'AgroEdge IA - Boletin R5','AgroEdge IA - Pronos
 ### Demostración del pronóstico agrícola antes de las 20:45
 
 El 24 de noviembre se verificaron visualmente los dos paneles en **Pronóstico agrícola**. Open-Meteo mostraba sus horizontes de 24 y 48 horas, con hora de consulta **20:27:51** en Bogotá. Eltiempoen.net mostraba cuatro filas vigentes para Toca, de las **20:00, 21:00, 22:00 y 23:00**, de la captura HTTPS del 23 de noviembre a las **21:40:34**. El panel incluía su procedencia y atribución. El filtro de vigencia explica por qué quedaban cuatro horas de la captura previa. La evidencia corresponde al estado anterior al horario automático de las 20:45. Ambos paneles se conservaron como contexto meteorológico externo. [Vista de ambos paneles](C:/AgroEdge/output/evidencia/Demostracion_Final/R5_Pronostico_Agricola_Antes_Actualizacion.png) · [Detalle y procedencia de Toca](C:/AgroEdge/output/evidencia/Demostracion_Final/R5_Eltiempoen_Procedencia_y_Datos.png)
+
+## Incidencia de la tarea de Toca y transición a las 09:00
+
+El Programador de tareas registró la primera ejecución automática del 24 de noviembre a las **20:45:00** de Bogotá con `LastTaskResult=1`. La acción registrada apuntaba al ejecutable existente `C:\AgroEdge\AgroEdge-IA\.venv\r5-python\Scripts\python.exe` y al script correcto. Su directorio de trabajo era el repositorio y la tarea se ejecutaba con sesión interactiva y permisos limitados. El intérprete tenía Requests 2.34.2 y Beautiful Soup 4.15.0. La resolución por defecto de `--dir` apuntaba a `C:\AgroEdge\AgroEdge-IA\data`, que es la carpeta donde se observó la reserva. [Configuración original registrada](C:/AgroEdge/output/evidencia/R5_WebScraping/Incidencia_Toca_2026-11-24/tarea-antes.json)
+
+La política de la SQLite habitual avanzó a `2026-11-26T00:45:01Z` y conservó la misma revisión y el mismo hash del HTML del 23 de noviembre. Ese avance coincide con la regla de 23 horas aplicada al intento de las 20:45:01. El proceso había abierto la base y reservado la consulta antes de fallar. El historial del Programador y el de DNS estaban desactivados, y la tarea original carecía de captura de salida. La evidencia permite ubicar el fallo después de la reserva y antes de guardar otra revisión. Quedaron indeterminados la excepción original, el inicio del GET y una eventual respuesta HTTP. El código `1` por sí solo no distingue un fallo de red, un rechazo HTTP o un error al analizar o guardar el HTML. [Estado SQLite al diagnosticar](C:/AgroEdge/output/evidencia/R5_WebScraping/Incidencia_Toca_2026-11-24/sqlite-antes.json)
+
+Se configuró la tarea de Toca para usar `pythonw.exe` y un lanzador con la carpeta `data` explícita. El lanzador conserva por ejecución `ejecucion.json`, `stdout.log` y `stderr.log` bajo `data/pronostico-toca-ejecuciones`, con hora, acción, directorio y código de salida. Las trazas distinguen bloqueo, intento por URL, respuesta HTTP y recepción del HTML. El intérprete de consola se ejecuta como proceso hijo sin ventana. Conserva la política original de frecuencia, `robots.txt` y `Retry-After`. Se mantuvo la acción de NOAA.
+
+| Verificación | Resultado |
+| --- | --- |
+| Disparo automático único del 24 de noviembre, 20:58:42 | El Programador devolvió `0`. `stdout` registró `EN_ESPERA` y `stderr` registró `limite_vigente`, sin intento HTTPS. El disparador temporal se retiró al terminar. |
+| SQLite y dashboard | Se conservó la captura HTTPS del 23 de noviembre a las 21:40:34. La API local respondió HTTP 200 con 48 horas almacenadas y el panel mostró cuatro vigentes durante la comprobación. |
+| Reproducción local | El HTML archivado produjo `NUEVA` y luego `REPETIDA` en SQLite aislada, con la misma revisión y 48 horas. Treinta pruebas Python pasaron, incluidas la persistencia de la bitácora, la transición horaria y un HTTP 429 simulado con `Retry-After`. |
+
+El único disparador diario quedó a las **09:00 de Bogotá**. El 25 de noviembre a esa hora seguirá vigente la reserva anterior. El límite vence el **25 de noviembre a las 19:45:01** y el primer ciclo de las 09:00 elegible para HTTPS es el **26 de noviembre**, si la sesión está disponible y la política de acceso permite la consulta. El ensayo certifica el arranque automático y el respeto del límite. La próxima consulta elegible permitirá observar el tramo HTTPS y, si falla, identificar la etapa y el error que registre esta nueva ejecución.
+
+```powershell
+$py = (Resolve-Path .venv/r5-python/Scripts/python.exe).Path
+./scripts/registrar-r5.ps1 -Python $py -Fuente Toca -Hora '09:00' -Actualizar
+Get-ScheduledTaskInfo -TaskName 'AgroEdge IA - Pronostico Toca R5'
+```
+
+[Resultado del Programador](C:/AgroEdge/output/evidencia/R5_WebScraping/Incidencia_Toca_2026-11-24/tarea-despues.json) · [Salida del disparo automático](C:/AgroEdge/output/evidencia/R5_WebScraping/Incidencia_Toca_2026-11-24/prueba-automatica-stdout.log) · [Captura del dashboard](C:/AgroEdge/output/evidencia/R5_WebScraping/Incidencia_Toca_2026-11-24/dashboard-captura-conservada.png)
